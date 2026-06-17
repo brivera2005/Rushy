@@ -36,7 +36,7 @@ object XmltvParser {
         try {
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "Rushy/1.1.0 (Android TV)")
+                .header("User-Agent", "Rushy/1.2.0 (Android TV)")
                 .build()
             val response = httpClient.newCall(request).execute()
             if (!response.isSuccessful) {

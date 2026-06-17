@@ -5,10 +5,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,7 +52,7 @@ fun MediaThumbnail(
             .clip(shape)
             .then(borderModifier)
             .background(ThemeColors.SurfaceDark)
-            .padding(6.dp),
+            .padding(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -58,8 +60,8 @@ fun MediaThumbnail(
             item = item,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(cardHeight)
-                .clip(RoundedCornerShape(8.dp)),
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(4.dp)),
             imageSize = 280,
         )
         if (showTitle) {
@@ -85,7 +87,7 @@ fun MediaThumbnail(
     }
 }
 
-/** Dense poster for 7-8 column grids */
+/** Dense poster — 2:3 rectangle, no ovals */
 @Composable
 fun MediaThumbnailDense(
     item: MediaItem,
@@ -95,26 +97,27 @@ fun MediaThumbnailDense(
     subtitle: String? = null,
 ) {
     val accent = LocalRushyTheme.current.currentAccentColor
-    val shape = RoundedCornerShape(8.dp)
+    val shape = RoundedCornerShape(ThemeColors.CornerRadius)
     Column(
         modifier = modifier
-            .width(108.dp)
+            .width(112.dp)
             .clip(shape)
             .then(
                 if (isFocused) Modifier.border(ThemeColors.FocusRingWidth, accent, shape)
                 else Modifier,
             )
-            .background(ThemeColors.SurfaceDark)
+            .background(ThemeColors.SurfaceElevated)
             .padding(4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         ThumbnailImage(
             item = item,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(cardHeight)
-                .clip(RoundedCornerShape(6.dp)),
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(4.dp)),
             imageSize = 200,
+            contentScale = ContentScale.Crop,
         )
         Text(
             text = item.title,
@@ -144,7 +147,7 @@ fun MediaThumbnailCompact(
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(4.dp))
             .background(ThemeColors.SurfaceElevated),
         contentAlignment = Alignment.Center,
     ) {
@@ -152,6 +155,7 @@ fun MediaThumbnailCompact(
             item = item,
             modifier = Modifier.fillMaxSize().padding(2.dp),
             imageSize = 96,
+            contentScale = ContentScale.Fit,
         )
     }
 }
@@ -161,6 +165,7 @@ private fun ThumbnailImage(
     item: MediaItem,
     modifier: Modifier = Modifier,
     imageSize: Int,
+    contentScale: ContentScale = ContentScale.Fit,
 ) {
     val accent = LocalRushyTheme.current.currentAccentColor
     Box(
@@ -176,7 +181,7 @@ private fun ThumbnailImage(
                     .size(imageSize)
                     .build(),
                 contentDescription = item.title,
-                contentScale = ContentScale.Fit,
+                contentScale = contentScale,
                 modifier = Modifier.fillMaxSize().padding(2.dp),
             )
         } else {

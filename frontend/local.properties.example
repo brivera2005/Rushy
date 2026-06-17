@@ -1,0 +1,5 @@
+# Android SDK location (required)
+sdk.dir=C\:\\Users\\brive\\Android\\sdk
+
+# TMDB API key for Home screen trending rows (free at https://www.themoviedb.org/settings/api)
+TMDB_API_KEY=

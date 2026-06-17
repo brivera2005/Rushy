@@ -20,14 +20,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
@@ -36,15 +36,15 @@ import androidx.tv.foundation.lazy.list.rememberTvLazyListState
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 
-private const val GUIDE_CHANNEL_PAGE = 24
-private const val TIMELINE_WIDTH_DP = 1440
-private const val CHANNEL_COL_WIDTH_DP = 168
+private const val EPG_BATCH_SIZE = 40
+private const val TIMELINE_WIDTH_DP = 1920
+private const val CHANNEL_COL_WIDTH_DP = 180
 
 @Composable
 fun TvGuideScreen(
@@ -53,10 +53,12 @@ fun TvGuideScreen(
     onPlay: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var channels by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var epgData by remember { mutableStateOf<Map<String, List<EpgProgram>>>(emptyMap()) }
     var isLoadingChannels by remember { mutableStateOf(true) }
-    var visibleStart by remember { mutableIntStateOf(0) }
+    var isLoadingEpg by remember { mutableStateOf(false) }
     val loadState by epgRepository.loadState.collectAsState()
     val timelineScroll = rememberScrollState()
     val listState = rememberTvLazyListState()
@@ -64,7 +66,7 @@ fun TvGuideScreen(
 
     val nowSec = System.currentTimeMillis() / 1000
     val windowStart = nowSec - 1800
-    val windowEnd = nowSec + 3 * 3600
+    val windowEnd = nowSec + 2 * 3600
     val slotMinutes = 30
     val slotCount = ((windowEnd - windowStart) / (slotMinutes * 60)).toInt()
     val timeSlots = (0 until slotCount).map { index ->
@@ -75,30 +77,29 @@ fun TvGuideScreen(
 
     LaunchedEffect(Unit) {
         isLoadingChannels = true
-        channels = repository.getLiveChannels(limit = 200)
+        channels = repository.getLiveChannels(limit = 300)
+        EpgSyncService.start(context, force = false)
         epgRepository.ensureXmltvParsed()
         isLoadingChannels = false
     }
 
-    LaunchedEffect(channels, loadState.isLoading) {
+    LaunchedEffect(channels, loadState.isLoading, loadState.programCount) {
         if (channels.isEmpty() || loadState.isLoading) return@LaunchedEffect
-        val slice = channels.drop(visibleStart).take(GUIDE_CHANNEL_PAGE)
-        epgData = epgRepository.refreshEpg(slice)
-    }
-
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            listState.layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: 0
-        }.distinctUntilChanged().collect { firstVisible ->
-            visibleStart = (firstVisible / GUIDE_CHANNEL_PAGE) * GUIDE_CHANNEL_PAGE
+        isLoadingEpg = true
+        val accumulated = mutableMapOf<String, List<EpgProgram>>()
+        channels.chunked(EPG_BATCH_SIZE).forEach { batch ->
+            val batchData = epgRepository.refreshEpg(batch)
+            accumulated.putAll(batchData)
+            epgData = accumulated.toMap()
         }
+        isLoadingEpg = false
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(ThemeColors.DarkBackground)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(
@@ -106,26 +107,40 @@ fun TvGuideScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "TV Guide",
-                style = MaterialTheme.typography.headlineSmall,
-                color = ThemeColors.TextPrimary,
-            )
-            Text(
-                text = when {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "TV Guide",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = ThemeColors.TextPrimary,
+                )
+                val statusText = when {
+                    loadState.error != null -> "EPG error: ${loadState.error}"
                     isLoadingChannels || loadState.isLoading -> loadState.phase.ifBlank { "Loading guide..." }
-                    else -> "${channels.size} channels · ${loadState.programCount} programmes"
+                    loadState.programCount > 0 -> "EPG: ${loadState.programCount} programmes · ${loadState.channelCount} channels mapped"
+                    else -> "${channels.size} channels · waiting for EPG data"
+                }
+                Text(
+                    text = statusText,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (loadState.error != null) ThemeColors.Error else ThemeColors.AccentPrimary,
+                )
+            }
+            Button(
+                onClick = {
+                    scope.launch {
+                        EpgSyncService.start(context, force = true)
+                        epgRepository.ensureXmltvParsed(force = true)
+                    }
                 },
-                style = MaterialTheme.typography.labelMedium,
-                color = ThemeColors.AccentPrimary,
-            )
+            ) {
+                Text("↻ Refresh Guide")
+            }
         }
 
-        // Timeline header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(4.dp))
                 .background(ThemeColors.SurfaceElevated)
                 .padding(vertical = 4.dp),
         ) {
@@ -151,7 +166,6 @@ fun TvGuideScreen(
                                 .padding(start = 4.dp),
                         )
                     }
-                    // Now line
                     Box(
                         modifier = Modifier
                             .offset(x = (nowFraction * TIMELINE_WIDTH_DP).dp)
@@ -171,7 +185,7 @@ fun TvGuideScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(52.dp)
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(RoundedCornerShape(4.dp))
                                 .background(ThemeColors.SurfaceDark),
                         )
                     }
@@ -186,6 +200,9 @@ fun TvGuideScreen(
                 }
             }
             else -> {
+                if (isLoadingEpg && epgData.isEmpty()) {
+                    Text("Loading programme data...", color = ThemeColors.TextMuted)
+                }
                 TvLazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -235,7 +252,7 @@ private fun GuideChannelRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(4.dp))
             .background(ThemeColors.SurfaceDark),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -281,7 +298,7 @@ private fun GuideChannelRow(
                         contentAlignment = Alignment.CenterStart,
                     ) {
                         Text(
-                            text = if (channel.epgChannelId.isNullOrBlank()) "No EPG data" else "No programmes in window",
+                            text = if (channel.epgChannelId.isNullOrBlank()) "No EPG ID" else "No programmes",
                             style = MaterialTheme.typography.labelSmall,
                             color = ThemeColors.TextMuted,
                             maxLines = 1,

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 
 import androidx.compose.foundation.layout.Row
 
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 
 import androidx.compose.foundation.layout.fillMaxSize
@@ -81,96 +82,6 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 import kotlinx.coroutines.launch
-
-
-
-enum class AppScreen(val label: String) {
-
-    HOME("Home"),
-
-    LIVE_TV("Live TV"),
-
-    GUIDE("TV Guide"),
-
-    MOVIES("Movies"),
-
-    SETTINGS("Settings"),
-
-}
-
-
-
-@Composable
-
-fun AppNavBar(
-
-    current: AppScreen,
-
-    onNavigate: (AppScreen) -> Unit,
-
-    settingsHasUpdate: Boolean = false,
-
-    modifier: Modifier = Modifier,
-
-) {
-
-    val accent = LocalRushyTheme.current.currentAccentColor
-
-    Row(
-
-        modifier = modifier.fillMaxWidth(),
-
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-
-    ) {
-
-        AppScreen.entries.forEach { screen ->
-
-            val selected = screen == current
-
-            val hasUpdateBadge = screen == AppScreen.SETTINGS && settingsHasUpdate
-
-            val label = if (hasUpdateBadge) "${screen.label} *" else screen.label
-
-            Button(
-
-                onClick = { onNavigate(screen) },
-
-                modifier = when {
-
-                    selected -> Modifier.border(2.dp, accent, MaterialTheme.shapes.small)
-
-                    hasUpdateBadge -> Modifier.border(2.dp, ThemeColors.EmeraldAccent, MaterialTheme.shapes.small)
-
-                    else -> Modifier
-
-                },
-
-            ) {
-
-                Text(
-
-                    text = label,
-
-                    color = when {
-
-                        selected -> accent
-
-                        hasUpdateBadge -> ThemeColors.EmeraldAccent
-
-                        else -> ThemeColors.TextPrimary
-
-                    },
-
-                )
-
-            }
-
-        }
-
-    }
-
-}
 
 
 
@@ -760,6 +671,138 @@ fun MoviesBrowserScreen(
 
 @Composable
 
+fun TvShowsBrowserScreen(
+
+    summary: CatalogSummary,
+
+    repository: LocalMediaRepository,
+
+    onPlay: (MediaItem) -> Unit,
+
+    modifier: Modifier = Modifier,
+
+) {
+
+    var searchInput by remember { mutableStateOf("") }
+
+    var debouncedSearch by remember { mutableStateOf("") }
+
+
+
+    LaunchedEffect(searchInput) {
+
+        delay(350)
+
+        debouncedSearch = searchInput
+
+    }
+
+
+
+    Column(
+
+        modifier = modifier.fillMaxSize(),
+
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+
+    ) {
+
+        Text(
+
+            text = "TV Shows",
+
+            style = MaterialTheme.typography.headlineSmall,
+
+            color = ThemeColors.TextPrimary,
+
+        )
+
+
+
+        SearchField(
+
+            query = searchInput,
+
+            onQueryChange = { searchInput = it },
+
+            placeholder = "Search series...",
+
+        )
+
+
+
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+
+            if (debouncedSearch.isNotBlank()) {
+
+                CategoryResultsGrid(
+
+                    repository = repository,
+
+                    categoryId = "all",
+
+                    search = debouncedSearch,
+
+                    source = MediaSource.XTREAM_SERIES,
+
+                    onPlay = onPlay,
+
+                )
+
+            } else {
+
+                val categories = summary.vodCategories.filter { it.id != "all" }.take(12)
+
+                if (categories.isEmpty()) {
+
+                    CategoryCarouselRow(
+
+                        title = "All Series",
+
+                        repository = repository,
+
+                        categoryId = "all",
+
+                        source = MediaSource.XTREAM_SERIES,
+
+                        onPlay = onPlay,
+
+                    )
+
+                } else {
+
+                    categories.forEach { category ->
+
+                        CategoryCarouselRow(
+
+                            title = category.name,
+
+                            repository = repository,
+
+                            categoryId = category.id,
+
+                            source = MediaSource.XTREAM_SERIES,
+
+                            onPlay = onPlay,
+
+                        )
+
+                    }
+
+                }
+
+            }
+
+        }
+
+    }
+
+}
+
+
+
+@Composable
+
 private fun CategoryCarouselRow(
 
     title: String,
@@ -767,6 +810,8 @@ private fun CategoryCarouselRow(
     repository: LocalMediaRepository,
 
     categoryId: String,
+
+    source: MediaSource = MediaSource.XTREAM_VOD,
 
     onPlay: (MediaItem) -> Unit,
 
@@ -776,11 +821,11 @@ private fun CategoryCarouselRow(
 
 
 
-    LaunchedEffect(categoryId) {
+    LaunchedEffect(categoryId, source) {
 
-        items = repository.getItemsBySource(MediaSource.XTREAM_VOD, categoryId = categoryId, limit = 20)
+        items = repository.getItemsBySource(source, categoryId = categoryId, limit = 20)
 
-        if (items.isNullOrEmpty()) {
+        if (items.isNullOrEmpty() && source == MediaSource.XTREAM_VOD) {
 
             items = repository.getItemsBySource(MediaSource.XTREAM_SERIES, categoryId = categoryId, limit = 20)
 
@@ -889,63 +934,38 @@ private fun CategoryResultsGrid(
 @Composable
 
 fun PosterCard(item: MediaItem, modifier: Modifier = Modifier) {
-
     Column(
-
         modifier = modifier.width(118.dp),
-
         verticalArrangement = Arrangement.spacedBy(6.dp),
-
     ) {
-
-        Box {
-
-            MediaThumbnailDense(item = item, cardHeight = 168.dp)
-
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f),
+        ) {
+            MediaThumbnailDense(item = item, modifier = Modifier.fillMaxWidth())
             item.rating?.let { rating ->
-
                 Text(
-
                     text = "★ $rating",
-
                     style = MaterialTheme.typography.labelSmall,
-
                     color = ThemeColors.EmeraldAccent,
-
                     modifier = Modifier
-
                         .align(Alignment.BottomEnd)
-
                         .background(ThemeColors.DarkBackground.copy(alpha = 0.8f))
-
                         .padding(horizontal = 6.dp, vertical = 2.dp),
-
                 )
-
             }
-
         }
-
         item.plot?.take(80)?.let { plot ->
-
             Text(
-
                 text = plot,
-
                 style = MaterialTheme.typography.labelSmall,
-
-                color = ThemeColors.CobaltAccent,
-
+                color = ThemeColors.TextSecondary,
                 maxLines = 2,
-
                 overflow = TextOverflow.Ellipsis,
-
             )
-
         }
-
     }
-
 }
 
 

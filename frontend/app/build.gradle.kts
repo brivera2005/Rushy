@@ -5,7 +5,14 @@
 }
 
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.util.Properties
 
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) load(file.inputStream())
+}
+val tmdbApiKey: String = localProperties.getProperty("TMDB_API_KEY", "")
 
 val defaultCredentialsFile = file("src/main/kotlin/com/rushy/app/DefaultCredentials.kt")
 val defaultCredentialsExample = file("src/main/kotlin/com/rushy/app/DefaultCredentials.kt.example")
@@ -33,9 +40,9 @@ android {
         applicationId = "com.rushy.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.1.0"
-
+        versionCode = 8
+        versionName = "1.2.0"
+        buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
     }
 
     signingConfigs {

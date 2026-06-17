@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,17 +19,24 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyRow
 import androidx.tv.foundation.lazy.list.items
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 
 data class SyncProgress(
     val phase: String,
@@ -45,7 +54,7 @@ fun SyncErrorView(
             .fillMaxWidth()
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = "Sync failed",
@@ -117,7 +126,7 @@ fun CategoryPillRow(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         categories.forEach { category ->
             val selected = category.id == selectedId
@@ -125,9 +134,13 @@ fun CategoryPillRow(
             Button(
                 onClick = { onSelect(category.id) },
                 modifier = if (selected) {
-                    Modifier.border(2.dp, accent, RoundedCornerShape(16.dp))
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .border(2.dp, accent, RoundedCornerShape(4.dp))
                 } else {
                     Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(ThemeColors.SurfaceDark)
                 },
             ) {
                 Text(
@@ -136,9 +149,165 @@ fun CategoryPillRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 )
             }
         }
+    }
+}
+
+@Composable
+fun PlexHeroBanner(
+    title: String,
+    subtitle: String?,
+    backdropUrl: String?,
+    onPlay: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(ThemeColors.CardRadius)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(220.dp)
+            .clip(shape)
+            .background(ThemeColors.SurfaceDark),
+    ) {
+        if (!backdropUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(backdropUrl)
+                    .crossfade(200)
+                    .build(),
+                contentDescription = title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color(0xEE1A1A2E),
+                            Color(0x881A1A2E),
+                            Color(0x331A1A2E),
+                        ),
+                    ),
+                ),
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineLarge,
+                color = ThemeColors.TextPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ThemeColors.TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.width(480.dp),
+                )
+            }
+            Button(onClick = onPlay) {
+                Text("▶  Play", modifier = Modifier.padding(horizontal = 16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun TmdbDiscoveryRow(
+    title: String,
+    items: List<TmdbMediaItem>,
+    onItemClick: (TmdbMediaItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (items.isEmpty()) return
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            color = ThemeColors.TextPrimary,
+        )
+        TvLazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(items, key = { it.id }) { item ->
+                Button(onClick = { onItemClick(item) }) {
+                    TmdbPosterCard(item = item)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TmdbPosterCard(
+    item: TmdbMediaItem,
+    modifier: Modifier = Modifier,
+    width: Dp = 120.dp,
+) {
+    val shape = RoundedCornerShape(ThemeColors.CornerRadius)
+    Column(
+        modifier = modifier.width(width),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(shape)
+                .background(ThemeColors.SurfaceElevated),
+        ) {
+            val url = item.posterUrl
+            if (!url.isNullOrBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(url)
+                        .crossfade(150)
+                        .build(),
+                    contentDescription = item.displayTitle,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    text = item.displayTitle.take(2).uppercase(),
+                    modifier = Modifier.align(Alignment.Center),
+                    color = ThemeColors.AccentPrimary,
+                )
+            }
+            if (item.voteAverage > 0) {
+                Text(
+                    text = "★ %.1f".format(item.voteAverage),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ThemeColors.AccentPrimary,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .background(Color(0xCC1A1A2E))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                )
+            }
+        }
+        Text(
+            text = item.displayTitle,
+            style = MaterialTheme.typography.labelSmall,
+            color = ThemeColors.TextPrimary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -154,64 +323,85 @@ fun HeroChannelRow(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
             color = ThemeColors.TextPrimary,
         )
-        TvLazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TvLazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(items, key = { it.id }) { item ->
-                HeroChannelCard(
-                    item = item,
-                    nowPlaying = nowPlaying[item.playbackId],
-                    onClick = { onPlay(item) },
-                )
+                Button(onClick = { onPlay(item) }) {
+                    LiveTvCard(
+                        item = item,
+                        nowPlaying = nowPlaying[item.playbackId],
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun HeroChannelCard(
+fun LiveTvCard(
     item: MediaItem,
-    nowPlaying: String?,
-    onClick: () -> Unit,
+    nowPlaying: String? = null,
+    modifier: Modifier = Modifier,
 ) {
-    val accent = LocalRushyTheme.current.currentAccentColor
-    Button(onClick = onClick) {
-        Column(
+    val shape = RoundedCornerShape(ThemeColors.CornerRadius)
+    Column(
+        modifier = modifier
+            .width(176.dp)
+            .clip(shape)
+            .background(ThemeColors.SurfaceElevated)
+            .padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
             modifier = Modifier
-                .width(160.dp)
-                .clip(RoundedCornerShape(ThemeColors.CornerRadius))
-                .background(ThemeColors.SurfaceElevated)
-                .border(1.dp, accent.copy(alpha = 0.2f), RoundedCornerShape(ThemeColors.CornerRadius))
-                .padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(4.dp))
+                .background(ThemeColors.SurfaceDark),
+            contentAlignment = Alignment.Center,
         ) {
-            MediaThumbnail(
-                item = item,
-                modifier = Modifier.fillMaxWidth(),
-                cardHeight = 80.dp,
-                showTitle = false,
-            )
+            val logo = item.logoUrl?.takeIf { it.startsWith("http") }
+            if (!logo.isNullOrBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(logo)
+                        .crossfade(150)
+                        .size(200)
+                        .build(),
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(8.dp),
+                )
+            } else {
+                Text(
+                    text = item.title.take(2).uppercase(),
+                    color = ThemeColors.AccentPrimary,
+                )
+            }
+        }
+        Text(
+            text = item.title,
+            style = MaterialTheme.typography.labelSmall,
+            color = ThemeColors.TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        nowPlaying?.let {
             Text(
-                text = item.title,
+                text = it,
                 style = MaterialTheme.typography.labelSmall,
-                color = ThemeColors.TextPrimary,
+                color = ThemeColors.AccentTeal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            nowPlaying?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ThemeColors.AccentPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
     }
 }
@@ -259,7 +449,7 @@ fun SkeletonGrid(
                         modifier = Modifier
                             .width(108.dp)
                             .height(140.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(ThemeColors.CornerRadius))
                             .background(ThemeColors.SurfaceDark),
                     )
                 }
@@ -279,7 +469,15 @@ fun FocusScaleBox(
         animationSpec = tween(200),
         label = "focusScale",
     )
-    Box(modifier = modifier.scale(scale)) {
+    val accent = LocalRushyTheme.current.currentAccentColor
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .then(
+                if (focused) Modifier.border(ThemeColors.FocusRingWidth, accent, RoundedCornerShape(ThemeColors.CornerRadius))
+                else Modifier,
+            ),
+    ) {
         content()
     }
 }

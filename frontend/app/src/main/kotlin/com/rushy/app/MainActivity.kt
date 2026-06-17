@@ -31,6 +31,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 
 import androidx.compose.foundation.layout.fillMaxSize
 
@@ -497,6 +500,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
                 if (result.liveCount > 0) {
                     syncScope.launch {
                         try {
+                            EpgSyncService.start(context, force = false)
                             epgRepository.ensureXmltvParsed()
                         } catch (e: Exception) {
                             Log.w("RushyApp", "Background EPG sync failed", e)
@@ -738,21 +742,33 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(ThemeColors.DarkBackground)) {
 
-        Column(
+        Row(modifier = Modifier.fillMaxSize()) {
 
-            modifier = Modifier
+            PlexSidebar(
 
-                .fillMaxSize()
+                current = currentScreen,
 
-                .background(ThemeColors.DarkBackground)
+                onNavigate = { currentScreen = it },
 
-                .padding(24.dp),
+                settingsHasUpdate = pendingUpdate != null,
 
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            )
 
-        ) {
+            Column(
+
+                modifier = Modifier
+
+                    .weight(1f)
+
+                    .fillMaxSize()
+
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+
+            ) {
 
             Row(
 
@@ -766,8 +782,6 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 Column {
 
-                    RushyLogo(size = RushyLogoSize.Header, showTagline = !credentials.isDemoMode)
-
                     if (credentials.isDemoMode) {
 
                         Text(
@@ -776,9 +790,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                             style = MaterialTheme.typography.bodySmall,
 
-                            color = ThemeColors.CobaltAccent,
-
-                            modifier = Modifier.padding(top = 4.dp),
+                            color = ThemeColors.AccentPrimary,
 
                         )
 
@@ -798,7 +810,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                             modifier = Modifier
 
-                                .border(2.dp, ThemeColors.EmeraldAccent, MaterialTheme.shapes.small)
+                                .border(2.dp, ThemeColors.EmeraldAccent, RoundedCornerShape(4.dp))
 
                                 .padding(horizontal = 8.dp),
 
@@ -806,7 +818,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                             Text(
 
-                                text = "Update Available (v${update.versionName})",
+                                text = "Update v${update.versionName}",
 
                                 color = ThemeColors.EmeraldAccent,
 
@@ -818,7 +830,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                     Button(onClick = { loadCatalog(showRefreshIndicator = true) }, enabled = !isRefreshing) {
 
-                        Text(if (isRefreshing) "Refreshing..." else "Refresh")
+                        Text(if (isRefreshing) "Syncing..." else "↻ Sync")
 
                     }
 
@@ -844,31 +856,19 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                         modifier = Modifier
 
-                            .border(2.dp, activeAccentColor, MaterialTheme.shapes.small)
+                            .border(2.dp, activeAccentColor, RoundedCornerShape(4.dp))
 
                             .padding(horizontal = 8.dp),
 
                     ) {
 
-                        Text("Voice Search", color = ThemeColors.TextPrimary)
+                        Text("🎤 Voice", color = ThemeColors.TextPrimary)
 
                     }
 
                 }
 
             }
-
-
-
-            AppNavBar(
-
-                current = currentScreen,
-
-                onNavigate = { currentScreen = it },
-
-                settingsHasUpdate = pendingUpdate != null,
-
-            )
 
 
 
@@ -976,6 +976,8 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                         epgRepository = epgRepository,
 
+                        credentials = credentials,
+
                         searchQuery = searchQuery,
 
                         searchResults = searchResults,
@@ -1016,6 +1018,16 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                     )
 
+                    AppScreen.TV_SHOWS -> TvShowsBrowserScreen(
+
+                        summary = catalog,
+
+                        repository = repo,
+
+                        onPlay = ::playItem,
+
+                    )
+
                     AppScreen.SETTINGS -> SettingsScreen(
 
                         playerSettings = playerSettings,
@@ -1043,6 +1055,8 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
                 }
 
                 }
+
+            }
 
             }
 
@@ -1079,19 +1093,28 @@ private fun HomeScreen(
     summary: CatalogSummary,
     repository: LocalMediaRepository,
     epgRepository: EpgRepository,
+    credentials: CredentialStore,
     searchQuery: String,
     searchResults: SearchResult?,
     onPlay: (MediaItem) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val trendingRepo = remember { TrendingRepository.getInstance(context) }
+    val contentResolver = remember { TrendingContentResolver.getInstance(context) }
     var favorites by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var featured by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
-    var previewMovies by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var recentMovies by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var nowPlaying by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var tmdbRows by remember { mutableStateOf(TmdbHomeRows()) }
+    var selectedCategoryId by remember { mutableStateOf("all") }
 
     LaunchedEffect(Unit) {
         favorites = repository.getFavorites(16)
         featured = repository.getFeaturedLive(14)
-        previewMovies = repository.getItemsBySource(MediaSource.XTREAM_VOD, limit = 20)
+        recentMovies = repository.getItemsBySource(MediaSource.XTREAM_VOD, limit = 20)
+        tmdbRows = trendingRepo.getHomeRows()
+        EpgSyncService.start(context, force = false)
         epgRepository.ensureXmltvParsed()
     }
 
@@ -1107,11 +1130,17 @@ private fun HomeScreen(
         nowPlaying = epg
     }
 
+    val heroTmdb = tmdbRows.heroItem
+    val heroChannel = featured.firstOrNull()
+    val heroTitle = heroTmdb?.displayTitle ?: heroChannel?.title ?: "Welcome to Rushy"
+    val heroSubtitle = heroTmdb?.overview?.take(120) ?: heroChannel?.let { nowPlaying[it.playbackId] }
+    val heroBackdrop = heroTmdb?.backdropUrl
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         if (searchQuery.isNotBlank()) {
             Text(
@@ -1127,65 +1156,81 @@ private fun HomeScreen(
             }
         }
 
-        // Dashboard stats
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            DashboardStatCard(
-                label = "Live Channels",
-                value = "%,d".format(summary.liveCount),
-                modifier = Modifier.weight(1f),
-            )
-            DashboardStatCard(
-                label = "Movies & Series",
-                value = "%,d".format(summary.movieCount),
-                modifier = Modifier.weight(1f),
-            )
-            DashboardStatCard(
-                label = "Favorites",
-                value = "%,d".format(summary.favoriteCount),
-                modifier = Modifier.weight(1f),
+        PlexHeroBanner(
+            title = heroTitle,
+            subtitle = heroSubtitle,
+            backdropUrl = heroBackdrop,
+            onPlay = {
+                when {
+                    heroChannel != null -> onPlay(heroChannel)
+                    heroTmdb != null -> scope.launch {
+                        val state = contentResolver.resolveAction(heroTmdb, repository)
+                        state.playableItem?.let { onPlay(it) }
+                            ?: run {
+                                if (credentials.hasPlexCredentials()) {
+                                    val result = contentResolver.requestOnPlex(heroTmdb)
+                                    Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                    }
+                }
+            },
+        )
+
+        if (!credentials.hasPlexCredentials()) {
+            Text(
+                text = "Connect Plex in Settings to request trending content",
+                color = ThemeColors.AccentPrimary,
+                style = MaterialTheme.typography.labelMedium,
             )
         }
 
-        // Hero — now playing
-        if (featured.isNotEmpty()) {
-            val hero = featured.first()
-            val heroNow = nowPlaying[hero.playbackId]
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(ThemeColors.CornerRadius))
-                    .background(ThemeColors.SurfaceElevated)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = "Now on Live TV",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ThemeColors.TextSecondary,
-                )
-                Text(
-                    text = hero.title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = ThemeColors.TextPrimary,
-                )
-                heroNow?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = ThemeColors.AccentPrimary,
-                    )
-                }
-                Button(onClick = { onPlay(hero) }) {
-                    Text("Watch Now")
-                }
-            }
+        tmdbRows.error?.let { err ->
+            Text(text = err, color = ThemeColors.TextMuted, style = MaterialTheme.typography.labelSmall)
         }
+
+        TrendingActionRow(
+            title = "Trending Movies",
+            items = tmdbRows.trendingMoviesDay,
+            repository = repository,
+            credentials = credentials,
+            onPlay = onPlay,
+        )
+
+        TrendingActionRow(
+            title = "Trending TV Shows",
+            items = tmdbRows.trendingTvDay,
+            repository = repository,
+            credentials = credentials,
+            onPlay = onPlay,
+        )
+
+        TrendingActionRow(
+            title = "Popular This Week",
+            items = tmdbRows.popularMovies,
+            repository = repository,
+            credentials = credentials,
+            onPlay = onPlay,
+        )
+
+        TrendingActionRow(
+            title = "Top Rated Movies",
+            items = tmdbRows.topRatedMovies,
+            repository = repository,
+            credentials = credentials,
+            onPlay = onPlay,
+        )
+
+        TrendingActionRow(
+            title = "Top Rated TV",
+            items = tmdbRows.topRatedTv,
+            repository = repository,
+            credentials = credentials,
+            onPlay = onPlay,
+        )
 
         if (favorites.isNotEmpty()) {
-            HeroChannelRow(title = "Your Favorites", items = favorites, onPlay = onPlay, nowPlaying = nowPlaying)
+            HeroChannelRow(title = "Live TV Favorites", items = favorites, onPlay = onPlay, nowPlaying = nowPlaying)
         }
 
         HeroChannelRow(
@@ -1195,14 +1240,27 @@ private fun HomeScreen(
             nowPlaying = nowPlaying,
         )
 
-        ThumbnailMediaRow(
-            title = "Movies & Series",
-            items = previewMovies,
-            onItemClick = onPlay,
+        if (recentMovies.isNotEmpty()) {
+            ThumbnailMediaRow(
+                title = "Recently Added Movies",
+                items = recentMovies,
+                onItemClick = onPlay,
+            )
+        }
+
+        Text(
+            text = "Browse by Category",
+            style = MaterialTheme.typography.titleMedium,
+            color = ThemeColors.TextPrimary,
+        )
+        CategoryPillRow(
+            categories = summary.liveCategories,
+            selectedId = selectedCategoryId,
+            onSelect = { selectedCategoryId = it },
         )
 
         Text(
-            text = "${summary.liveCategories.size - 1} categories · ${summary.movieCount} titles",
+            text = "${summary.liveCount} channels · ${summary.movieCount} titles",
             color = ThemeColors.TextMuted,
             style = MaterialTheme.typography.labelMedium,
         )
@@ -1247,13 +1305,13 @@ private fun ThumbnailMediaRow(
 
 
 
-    TvLazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    TvLazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
 
         items(items, key = { it.id }) { item ->
 
             Button(onClick = { onItemClick(item) }) {
 
-                MediaThumbnailDense(item = item, cardHeight = 168.dp)
+                PosterCard(item = item)
 
             }
 

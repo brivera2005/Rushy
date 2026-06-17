@@ -132,12 +132,14 @@ fun SettingsScreen(
                 } else {
                     "No Xtream credentials configured."
                 },
-                color = ThemeColors.CobaltAccent,
+                color = ThemeColors.TextSecondary,
             )
             if (credentials.isDemoMode) {
                 Text(text = "Running in demo mode.", color = ThemeColors.CrimsonAccent)
             }
         }
+
+        PlexWatchlistSettingsSection(credentials = credentials)
 
         Button(onClick = onResync) {
             Text("Refresh Catalog")
@@ -163,6 +165,109 @@ fun SettingsScreen(
             text = "Tip: Set Live TV to Built-in Player if TiviMate is not installed.",
             color = ThemeColors.TextPrimary.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun PlexWatchlistSettingsSection(credentials: CredentialStore) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var serverUrl by remember { mutableStateOf(credentials.plexServerUrl) }
+    var token by remember { mutableStateOf(credentials.plexToken) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var isTesting by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = "Connect Plex for Watchlist Requests",
+            style = MaterialTheme.typography.titleMedium,
+            color = ThemeColors.TextPrimary,
+        )
+        Text(
+            text = "Add your Plex server URL and X-Plex-Token to request trending movies and shows. Your Plex server (Radarr/Sonarr) handles downloads.",
+            color = ThemeColors.TextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        SettingsTextField(
+            label = "Plex Server URL",
+            value = serverUrl,
+            placeholder = "http://192.168.1.10:32400",
+            onValueChange = { serverUrl = it },
+        )
+        SettingsTextField(
+            label = "X-Plex-Token",
+            value = token,
+            placeholder = "Your Plex token",
+            onValueChange = { token = it },
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    credentials.savePlex(serverUrl, token)
+                    status = "Plex credentials saved"
+                    Toast.makeText(context, "Plex credentials saved", Toast.LENGTH_SHORT).show()
+                },
+            ) {
+                Text("Save Plex")
+            }
+            Button(
+                onClick = {
+                    scope.launch {
+                        isTesting = true
+                        status = "Testing Plex connection..."
+                        val ok = TrendingContentResolver.getInstance(context).testPlexConnection()
+                        isTesting = false
+                        status = if (ok) {
+                            "Plex watchlist connected ✓"
+                        } else {
+                            "Plex connection failed — check token"
+                        }
+                        Toast.makeText(context, status, Toast.LENGTH_LONG).show()
+                    }
+                },
+                enabled = !isTesting && token.isNotBlank(),
+            ) {
+                Text(if (isTesting) "Testing..." else "Test Connection")
+            }
+        }
+
+        status?.let {
+            Text(
+                text = it,
+                color = if (it.contains("✓")) ThemeColors.EmeraldAccent else ThemeColors.TextSecondary,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsTextField(
+    label: String,
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = label, color = ThemeColors.TextPrimary, style = MaterialTheme.typography.labelMedium)
+        androidx.compose.foundation.text.BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = ThemeColors.TextPrimary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(ThemeColors.SurfaceDark)
+                .padding(12.dp),
+            decorationBox = { inner ->
+                if (value.isEmpty()) {
+                    Text(text = placeholder, color = ThemeColors.TextMuted)
+                }
+                inner()
+            },
         )
     }
 }

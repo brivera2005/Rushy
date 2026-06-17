@@ -33,6 +33,7 @@ class PlaybackRouter(
         val intent = Intent(context, PlayerActivity::class.java).apply {
             putExtra(PlayerActivity.EXTRA_STREAM_URL, streamUrl)
             putExtra(PlayerActivity.EXTRA_TITLE, item.title)
+            putExtra(PlayerActivity.EXTRA_IS_LIVE, item.source == MediaSource.XTREAM_LIVE)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         context.startActivity(intent)

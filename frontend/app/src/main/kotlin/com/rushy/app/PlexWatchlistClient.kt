@@ -119,7 +119,7 @@ class PlexWatchlistClient(
                 .header("X-Plex-Token", token)
                 .header("X-Plex-Client-Identifier", CLIENT_ID)
                 .header("X-Plex-Product", "Rushy")
-                .header("X-Plex-Version", "1.2.0")
+                .header("X-Plex-Version", "1.2.1")
                 .header("Accept", "application/json")
                 .build()
 
@@ -201,7 +201,7 @@ class PlexWatchlistClient(
             .header("X-Plex-Token", token)
             .header("X-Plex-Client-Identifier", CLIENT_ID)
             .header("X-Plex-Product", "Rushy")
-            .header("X-Plex-Version", "1.2.0")
+            .header("X-Plex-Version", "1.2.1")
             .header("Accept", "application/json")
             .build()
     }
@@ -226,7 +226,7 @@ class PlexWatchlistClient(
     companion object {
         private const val TAG = "PlexWatchlistClient"
         private const val DISCOVER_BASE = "https://discover.provider.plex.tv"
-        private const val CLIENT_ID = "rushy-android-tv-1.2.0"
+        private const val CLIENT_ID = "rushy-android-tv-1.2.1"
 
         fun fromCredentials(credentials: CredentialStore): PlexWatchlistClient {
             return PlexWatchlistClient(

@@ -1206,7 +1206,7 @@ private fun HomeScreen(
         )
 
         TrendingActionRow(
-            title = "Popular This Week",
+            title = "Popular Movies",
             items = tmdbRows.popularMovies,
             repository = repository,
             credentials = credentials,
@@ -1214,16 +1214,8 @@ private fun HomeScreen(
         )
 
         TrendingActionRow(
-            title = "Top Rated Movies",
+            title = "Popular TV Shows",
             items = tmdbRows.topRatedMovies,
-            repository = repository,
-            credentials = credentials,
-            onPlay = onPlay,
-        )
-
-        TrendingActionRow(
-            title = "Top Rated TV",
-            items = tmdbRows.topRatedTv,
             repository = repository,
             credentials = credentials,
             onPlay = onPlay,

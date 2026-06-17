@@ -12,16 +12,19 @@ import java.util.concurrent.TimeUnit
 
 class TrendingRepository private constructor(private val context: Context) {
     private val gson = Gson()
-    private val cacheFile = File(context.cacheDir, "tmdb_home_cache.json")
-    private val client = OkHttpClient.Builder()
+    private val cacheFile = File(context.cacheDir, "trakt_home_cache.json")
+    private val traktSettings = TraktSettings.getInstance(context)
+    private val traktClient = TraktApiClient(traktSettings)
+    private val tmdbClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
     suspend fun getHomeRows(forceRefresh: Boolean = false): TmdbHomeRows = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.TMDB_API_KEY
-        if (apiKey.isBlank()) {
-            return@withContext TmdbHomeRows(error = "Add TMDB_API_KEY to local.properties")
+        if (!traktSettings.hasClientId()) {
+            return@withContext TmdbHomeRows(
+                error = "Add TRAKT_CLIENT_ID to local.properties (Settings → Trakt)",
+            )
         }
 
         if (!forceRefresh) {
@@ -33,32 +36,78 @@ class TrendingRepository private constructor(private val context: Context) {
         }
 
         try {
-            val trendingMovies = fetchTrending("movie", "day", apiKey)
-            val trendingTv = fetchTrending("tv", "day", apiKey)
-            val popular = fetchList("/movie/popular", apiKey, "movie")
-            val topRated = fetchList("/movie/top_rated", apiKey, "movie")
-            val topRatedTv = fetchList("/tv/top_rated", apiKey, "tv")
-            val hero = (trendingMovies + trendingTv).randomOrNull()
-            val rows = TmdbHomeRows(
-                trendingMoviesDay = trendingMovies,
-                trendingTvDay = trendingTv,
-                popularMovies = popular,
-                topRatedMovies = topRated,
-                topRatedTv = topRatedTv,
-                heroItem = hero,
-                loadedAt = System.currentTimeMillis(),
-            )
-            cacheFile.writeText(gson.toJson(rows))
-            rows
+            val rows = fetchFromTrakt()
+            if (rows.hasContent) {
+                cacheFile.writeText(gson.toJson(rows))
+                return@withContext rows
+            }
+            val tmdbFallback = fetchFromTmdbFallback()
+            if (tmdbFallback != null) {
+                cacheFile.writeText(gson.toJson(tmdbFallback))
+                return@withContext tmdbFallback
+            }
+            rows.copy(error = rows.error ?: "Trakt returned no trending data")
         } catch (e: Exception) {
-            Log.e(TAG, "TMDB fetch failed", e)
-            loadCache() ?: TmdbHomeRows(error = e.message ?: "TMDB unavailable")
+            Log.e(TAG, "Trakt fetch failed", e)
+            loadCache() ?: fetchFromTmdbFallback()
+                ?: TmdbHomeRows(error = e.message ?: "Trakt unavailable")
         }
     }
 
-    private fun fetchTrending(mediaType: String, window: String, apiKey: String): List<TmdbMediaItem> {
-        val url = "$BASE_URL/trending/$mediaType/$window?api_key=$apiKey"
-        val response = client.newCall(Request.Builder().url(url).build()).execute()
+    private suspend fun fetchFromTrakt(): TmdbHomeRows {
+        val trendingMovies = traktClient.fetchTrendingMovies()
+        val trendingTv = traktClient.fetchTrendingShows()
+        val popularMovies = traktClient.fetchPopularMovies()
+        val popularShows = traktClient.fetchPopularShows()
+        val hero = (trendingMovies + trendingTv).randomOrNull()
+        val error = if (
+            trendingMovies.isEmpty() &&
+            trendingTv.isEmpty() &&
+            popularMovies.isEmpty() &&
+            popularShows.isEmpty()
+        ) {
+            "Trakt returned empty rows — check TRAKT_CLIENT_ID"
+        } else {
+            null
+        }
+        return TmdbHomeRows(
+            trendingMoviesDay = trendingMovies,
+            trendingTvDay = trendingTv,
+            popularMovies = popularMovies,
+            topRatedMovies = popularShows,
+            topRatedTv = emptyList(),
+            heroItem = hero,
+            loadedAt = System.currentTimeMillis(),
+            error = error,
+        )
+    }
+
+    private fun fetchFromTmdbFallback(): TmdbHomeRows? {
+        val apiKey = BuildConfig.TMDB_API_KEY
+        if (apiKey.isBlank()) return null
+        return try {
+            val trendingMovies = fetchTmdbTrending("movie", "day", apiKey)
+            val trendingTv = fetchTmdbTrending("tv", "day", apiKey)
+            val popular = fetchTmdbList("/movie/popular", apiKey, "movie")
+            val popularTv = fetchTmdbList("/tv/popular", apiKey, "tv")
+            TmdbHomeRows(
+                trendingMoviesDay = trendingMovies,
+                trendingTvDay = trendingTv,
+                popularMovies = popular,
+                topRatedMovies = popularTv,
+                topRatedTv = emptyList(),
+                heroItem = (trendingMovies + trendingTv).randomOrNull(),
+                loadedAt = System.currentTimeMillis(),
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "TMDB fallback failed", e)
+            null
+        }
+    }
+
+    private fun fetchTmdbTrending(mediaType: String, window: String, apiKey: String): List<TmdbMediaItem> {
+        val url = "$TMDB_BASE_URL/trending/$mediaType/$window?api_key=$apiKey"
+        val response = tmdbClient.newCall(Request.Builder().url(url).build()).execute()
         if (!response.isSuccessful) return emptyList()
         val body = response.body?.string() ?: return emptyList()
         return gson.fromJson(body, TmdbTrendingResponse::class.java).results.map {
@@ -66,9 +115,9 @@ class TrendingRepository private constructor(private val context: Context) {
         }
     }
 
-    private fun fetchList(path: String, apiKey: String, mediaType: String): List<TmdbMediaItem> {
-        val url = "$BASE_URL$path?api_key=$apiKey"
-        val response = client.newCall(Request.Builder().url(url).build()).execute()
+    private fun fetchTmdbList(path: String, apiKey: String, mediaType: String): List<TmdbMediaItem> {
+        val url = "$TMDB_BASE_URL$path?api_key=$apiKey"
+        val response = tmdbClient.newCall(Request.Builder().url(url).build()).execute()
         if (!response.isSuccessful) return emptyList()
         val body = response.body?.string() ?: return emptyList()
         return gson.fromJson(body, TmdbTrendingResponse::class.java).results.map {
@@ -81,7 +130,7 @@ class TrendingRepository private constructor(private val context: Context) {
         return runCatching { gson.fromJson(cacheFile.readText(), TmdbHomeRows::class.java) }.getOrNull()
     }
 
-    /** Fuzzy-match TMDB title against local VOD catalog for playable items. */
+    /** Fuzzy-match trending title against local VOD catalog for playable items. */
     suspend fun matchToCatalog(
         tmdbItem: TmdbMediaItem,
         repository: LocalMediaRepository,
@@ -101,7 +150,7 @@ class TrendingRepository private constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "TrendingRepository"
-        private const val BASE_URL = "https://api.themoviedb.org/3"
+        private const val TMDB_BASE_URL = "https://api.themoviedb.org/3"
         private const val CACHE_TTL_MS = 6 * 60 * 60 * 1000L
 
         @Volatile
@@ -114,3 +163,9 @@ class TrendingRepository private constructor(private val context: Context) {
         }
     }
 }
+
+private val TmdbHomeRows.hasContent: Boolean
+    get() = trendingMoviesDay.isNotEmpty() ||
+        trendingTvDay.isNotEmpty() ||
+        popularMovies.isNotEmpty() ||
+        topRatedMovies.isNotEmpty()

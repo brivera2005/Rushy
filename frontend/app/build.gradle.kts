@@ -13,6 +13,8 @@ val localProperties = Properties().apply {
     if (file.exists()) load(file.inputStream())
 }
 val tmdbApiKey: String = localProperties.getProperty("TMDB_API_KEY", "")
+val traktClientId: String = localProperties.getProperty("TRAKT_CLIENT_ID", "")
+val traktClientSecret: String = localProperties.getProperty("TRAKT_CLIENT_SECRET", "")
 
 val defaultCredentialsFile = file("src/main/kotlin/com/rushy/app/DefaultCredentials.kt")
 val defaultCredentialsExample = file("src/main/kotlin/com/rushy/app/DefaultCredentials.kt.example")
@@ -40,9 +42,11 @@ android {
         applicationId = "com.rushy.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.2.0"
+        versionCode = 10
+        versionName = "1.3.0"
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
+        buildConfigField("String", "TRAKT_CLIENT_ID", "\"$traktClientId\"")
+        buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"$traktClientSecret\"")
     }
 
     signingConfigs {

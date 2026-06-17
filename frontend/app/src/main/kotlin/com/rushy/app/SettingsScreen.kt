@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -141,6 +142,8 @@ fun SettingsScreen(
 
         PlexWatchlistSettingsSection(credentials = credentials)
 
+        TraktSettingsSection()
+
         Button(onClick = onResync) {
             Text("Refresh Catalog")
         }
@@ -166,6 +169,184 @@ fun SettingsScreen(
             color = ThemeColors.TextPrimary.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+@Composable
+private fun TraktSettingsSection() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val traktSettings = remember { TraktSettings.getInstance(context) }
+    val traktClient = remember { TraktApiClient(traktSettings) }
+
+    var clientId by remember { mutableStateOf(traktSettings.clientIdOverride) }
+    var clientSecret by remember { mutableStateOf(traktSettings.clientSecretOverride) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var isConnecting by remember { mutableStateOf(false) }
+    var pendingSession by remember { mutableStateOf(traktSettings.pendingSessionOrNull()) }
+    var isConnected by remember { mutableStateOf(traktSettings.isConnected()) }
+
+    val buildClientId = BuildConfig.TRAKT_CLIENT_ID.isNotBlank()
+    val buildClientSecret = BuildConfig.TRAKT_CLIENT_SECRET.isNotBlank()
+
+    LaunchedEffect(Unit) {
+        if (traktSettings.hasPendingDeviceAuth() && traktSettings.hasClientCredentials()) {
+            isConnecting = true
+            status = "Resuming Trakt authorization..."
+            when (val result = traktClient.pollDeviceTokenUntilComplete()) {
+                TraktPollResult.Success -> {
+                    isConnected = true
+                    pendingSession = null
+                    status = "Trakt account connected"
+                }
+                TraktPollResult.Expired -> {
+                    pendingSession = null
+                    status = "Trakt code expired — tap Connect Trakt Account"
+                }
+                is TraktPollResult.Error -> status = result.message
+                TraktPollResult.Pending -> Unit
+            }
+            isConnecting = false
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            text = "Trakt",
+            style = MaterialTheme.typography.titleMedium,
+            color = ThemeColors.TextPrimary,
+        )
+        Text(
+            text = "Trending and discover rows use Trakt. Public lists need only a Client ID; linking your account enables personalized data.",
+            color = ThemeColors.TextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        Text(
+            text = when {
+                isConnected -> "Account: Connected"
+                traktSettings.hasClientId() -> "Account: Not linked (public trending active)"
+                else -> "Client ID not configured"
+            },
+            color = if (isConnected) ThemeColors.EmeraldAccent else ThemeColors.TextSecondary,
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        if (!buildClientId) {
+            SettingsTextField(
+                label = "Trakt Client ID",
+                value = clientId,
+                placeholder = "From trakt.tv/oauth/applications",
+                onValueChange = { clientId = it },
+            )
+        } else {
+            Text(
+                text = "Client ID: configured in build",
+                color = ThemeColors.TextSecondary,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        if (!buildClientSecret) {
+            SettingsTextField(
+                label = "Trakt Client Secret",
+                value = clientSecret,
+                placeholder = "Required for account linking",
+                onValueChange = { clientSecret = it },
+            )
+        } else {
+            Text(
+                text = "Client Secret: configured in build",
+                color = ThemeColors.TextSecondary,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!buildClientId || !buildClientSecret) {
+                Button(
+                    onClick = {
+                        traktSettings.clientIdOverride = clientId
+                        traktSettings.clientSecretOverride = clientSecret
+                        status = "Trakt API credentials saved"
+                        Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
+                    },
+                ) {
+                    Text("Save Trakt API")
+                }
+            }
+            Button(
+                onClick = {
+                    scope.launch {
+                        isConnecting = true
+                        status = "Starting Trakt device auth..."
+                        val result = traktClient.startDeviceAuth()
+                        isConnecting = false
+                        result.fold(
+                            onSuccess = { session ->
+                                pendingSession = session
+                                status = "Enter code at ${session.verificationUrl}"
+                                Toast.makeText(
+                                    context,
+                                    "Enter ${session.userCode} at trakt.tv/activate",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                                isConnecting = true
+                                when (val poll = traktClient.pollDeviceTokenUntilComplete()) {
+                                    TraktPollResult.Success -> {
+                                        isConnected = true
+                                        pendingSession = null
+                                        status = "Trakt account connected"
+                                    }
+                                    TraktPollResult.Expired -> {
+                                        pendingSession = null
+                                        status = "Code expired — try again"
+                                    }
+                                    is TraktPollResult.Error -> status = poll.message
+                                    TraktPollResult.Pending -> Unit
+                                }
+                                isConnecting = false
+                            },
+                            onFailure = { err ->
+                                status = err.message ?: "Failed to start Trakt auth"
+                                Toast.makeText(context, status, Toast.LENGTH_LONG).show()
+                            },
+                        )
+                    }
+                },
+                enabled = !isConnecting && traktSettings.hasClientCredentials(),
+            ) {
+                Text(if (isConnecting) "Connecting..." else "Connect Trakt Account")
+            }
+            if (isConnected) {
+                Button(
+                    onClick = {
+                        traktSettings.disconnect()
+                        isConnected = false
+                        pendingSession = null
+                        status = "Trakt disconnected"
+                    },
+                ) {
+                    Text("Disconnect")
+                }
+            }
+        }
+
+        pendingSession?.let { session ->
+            Text(
+                text = "Go to ${session.verificationUrl} and enter: ${session.userCode}",
+                color = ThemeColors.AccentPrimary,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+
+        status?.let {
+            Text(
+                text = it,
+                color = ThemeColors.CobaltAccent,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 

@@ -18,8 +18,14 @@ data class TmdbMediaItem(
     @SerializedName("media_type") val mediaType: String? = null,
 ) {
     val displayTitle: String get() = title ?: name ?: "Unknown"
-    val posterUrl: String? get() = posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }
-    val backdropUrl: String? get() = backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }
+    val posterUrl: String?
+        get() = posterPath?.let { path ->
+            if (path.startsWith("http")) path else "https://image.tmdb.org/t/p/w342$path"
+        }
+    val backdropUrl: String?
+        get() = backdropPath?.let { path ->
+            if (path.startsWith("http")) path else "https://image.tmdb.org/t/p/w1280$path"
+        }
     val isMovie: Boolean get() = mediaType == "movie" || title != null
 }
 

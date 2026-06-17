@@ -58,7 +58,7 @@ class TraktSettings(context: Context) {
         private set(value) = prefs.edit().putInt(KEY_POLL_INTERVAL, value).apply()
 
     fun effectiveClientId(): String =
-        clientIdOverride.ifBlank { BuildConfig.TRAKT_CLIENT_ID }
+        clientIdOverride.ifBlank { BuildConfig.TRAKT_CLIENT_ID }.ifBlank { TraktConfig.CLIENT_ID }
 
     fun effectiveClientSecret(): String =
         clientSecretOverride.ifBlank { BuildConfig.TRAKT_CLIENT_SECRET }

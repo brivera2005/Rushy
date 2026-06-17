@@ -1,10 +1,10 @@
 # Android SDK location (required)
 sdk.dir=C\:\\Users\\brive\\Android\\sdk
 
-# Trakt API credentials for Home trending rows (https://trakt.tv/oauth/applications)
-# Public trending works with TRAKT_CLIENT_ID only; account linking needs both.
-TRAKT_CLIENT_ID=
-TRAKT_CLIENT_SECRET=
+# Trakt: copy trakt.properties.example → trakt.properties (preferred, gitignored).
+# Client ID is also in TraktConfig.kt; secret is baked at build time from trakt.properties only.
+# TRAKT_CLIENT_ID=
+# TRAKT_CLIENT_SECRET=
 
 # Optional TMDB fallback if Trakt is unavailable
 TMDB_API_KEY=

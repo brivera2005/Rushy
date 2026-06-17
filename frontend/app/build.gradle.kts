@@ -8,19 +8,45 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.util.Properties
 
 
+val traktProperties = Properties().apply {
+    val file = rootProject.file("trakt.properties")
+    if (file.exists()) load(file.inputStream())
+}
 val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
     if (file.exists()) load(file.inputStream())
 }
-val tmdbApiKey: String = localProperties.getProperty("TMDB_API_KEY", "")
-val traktClientId: String = localProperties.getProperty("TRAKT_CLIENT_ID", "")
-val traktClientSecret: String = localProperties.getProperty("TRAKT_CLIENT_SECRET", "")
+
+fun buildProperty(key: String, default: String = ""): String {
+    val local = localProperties.getProperty(key)?.trim().orEmpty()
+    if (local.isNotEmpty()) return local
+    val trakt = traktProperties.getProperty(key)?.trim().orEmpty()
+    if (trakt.isNotEmpty()) return trakt
+    return default
+}
+
+val tmdbApiKey: String = buildProperty("TMDB_API_KEY")
+val traktClientId: String = buildProperty(
+    "TRAKT_CLIENT_ID",
+    "512f6bfe24c45d58153d3dd6814ace2037927045d3ab2ad61468348aba92876f",
+)
+val traktClientSecret: String = buildProperty("TRAKT_CLIENT_SECRET")
+
+val noIptvCreds: Boolean =
+    project.hasProperty("noIptvCreds") && project.property("noIptvCreds").toString() == "true"
 
 val defaultCredentialsFile = file("src/main/kotlin/com/rushy/app/DefaultCredentials.kt")
 val defaultCredentialsExample = file("src/main/kotlin/com/rushy/app/DefaultCredentials.kt.example")
 
 tasks.register("ensureDefaultCredentials") {
     doLast {
+        if (noIptvCreds) {
+            if (!defaultCredentialsExample.exists()) {
+                throw GradleException("Missing DefaultCredentials.kt.example for public build.")
+            }
+            defaultCredentialsExample.copyTo(defaultCredentialsFile, overwrite = true)
+            return@doLast
+        }
         if (!defaultCredentialsFile.exists() && defaultCredentialsExample.exists()) {
             defaultCredentialsExample.copyTo(defaultCredentialsFile)
         }
@@ -42,8 +68,8 @@ android {
         applicationId = "com.rushy.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.3.0"
+        versionCode = 11
+        versionName = "1.3.1"
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
         buildConfigField("String", "TRAKT_CLIENT_ID", "\"$traktClientId\"")
         buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"$traktClientSecret\"")

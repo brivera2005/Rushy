@@ -1,0 +1,5 @@
+# Trakt API credentials (https://trakt.tv/oauth/applications)
+# Copy to trakt.properties (gitignored) and fill in both values for local/release builds.
+# CLIENT_ID is also baked into TraktConfig.kt for trending without this file.
+TRAKT_CLIENT_ID=your_client_id
+TRAKT_CLIENT_SECRET=your_client_secret

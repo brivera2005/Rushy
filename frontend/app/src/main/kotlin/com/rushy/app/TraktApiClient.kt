@@ -56,7 +56,7 @@ class TraktApiClient(
     suspend fun startDeviceAuth(): Result<TraktDeviceAuthSession> = withContext(Dispatchers.IO) {
         val clientId = settings.effectiveClientId()
         if (clientId.isBlank()) {
-            return@withContext Result.failure(IllegalStateException("Add TRAKT_CLIENT_ID to local.properties"))
+            return@withContext Result.failure(IllegalStateException("Trakt client ID not configured"))
         }
         try {
             val body = gson.toJson(mapOf("client_id" to clientId))

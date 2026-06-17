@@ -23,7 +23,7 @@ class TrendingRepository private constructor(private val context: Context) {
     suspend fun getHomeRows(forceRefresh: Boolean = false): TmdbHomeRows = withContext(Dispatchers.IO) {
         if (!traktSettings.hasClientId()) {
             return@withContext TmdbHomeRows(
-                error = "Add TRAKT_CLIENT_ID to local.properties (Settings → Trakt)",
+                error = "Trakt client ID missing — rebuild with trakt.properties or check Settings → Trakt",
             )
         }
 

@@ -60,6 +60,7 @@ Thumbs.db
 
 local.properties
 credentials.local.properties
+frontend/trakt.properties
 
 *.zip
 .cmdline-tools.zip

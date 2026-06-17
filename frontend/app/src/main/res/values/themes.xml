@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Rushy" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/rushy_background</item>
+        <item name="android:colorBackground">@color/rushy_background</item>
+    </style>
+</resources>

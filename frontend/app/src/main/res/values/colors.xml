@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rushy_background">#0A0A0A</color>
+    <color name="rushy_surface">#121212</color>
+    <color name="rushy_text_primary">#FFFFFF</color>
+    <color name="rushy_crimson_accent">#D32F2F</color>
+    <color name="rushy_cobalt_accent">#1E88E5</color>
+    <color name="rushy_emerald_accent">#43A047</color>
+</resources>

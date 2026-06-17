@@ -127,7 +127,8 @@ abstract class MediaDatabase : RoomDatabase() {
                     context.applicationContext,
                     MediaDatabase::class.java,
                     "rushy_media.db",
-                ).build().also { instance = it }
+                ).fallbackToDestructiveMigration()
+                    .build().also { instance = it }
             }
         }
     }

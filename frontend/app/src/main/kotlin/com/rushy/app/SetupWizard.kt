@@ -26,7 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SetupWizardView(onSetupComplete: () -> Unit) {
@@ -198,13 +200,23 @@ fun SetupWizardView(onSetupComplete: () -> Unit) {
                         Button(
                             onClick = {
                                 if (isSubmitting) return@Button
+                                if (!credentials.hasXtreamCredentials()) {
+                                    Toast.makeText(
+                                        context,
+                                        "Xtream credentials are missing. Go back to Step 1.",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                    return@Button
+                                }
                                 isSubmitting = true
                                 scope.launch {
                                     try {
                                         if (backendUrl.isNotBlank()) {
                                             credentials.backendUrl = backendUrl
                                         }
-                                        credentials.completeSetup()
+                                        withContext(Dispatchers.IO) {
+                                            credentials.completeSetup()
+                                        }
                                         onSetupComplete()
                                     } catch (e: Exception) {
                                         Toast.makeText(

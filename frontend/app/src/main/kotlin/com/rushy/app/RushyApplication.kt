@@ -17,6 +17,7 @@ class RushyApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         installCrashLogger()
+        CredentialStore.getInstance(this).ensureDevCredentialsIfNeeded()
     }
 
     override fun newImageLoader(): ImageLoader {

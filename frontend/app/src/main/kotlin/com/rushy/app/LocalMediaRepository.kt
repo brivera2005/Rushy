@@ -26,7 +26,7 @@ class LocalMediaRepository private constructor(
 
 ) {
 
-    private val dao = MediaDatabase.getInstance(context).mediaDao()
+    private val dao by lazy { MediaDatabase.getInstance(context).mediaDao() }
 
     private val legacyCacheFile = File(context.filesDir, "media_cache.json")
 
@@ -39,6 +39,26 @@ class LocalMediaRepository private constructor(
         runCatching { legacyCacheFile.delete() }
 
         runCatching { legacyFlagsFile.delete() }
+
+    }
+
+
+
+    suspend fun verifyDatabaseHealth(): Boolean = withContext(Dispatchers.IO) {
+
+        try {
+
+            dao.totalCount()
+
+            true
+
+        } catch (e: Exception) {
+
+            Log.e(TAG, "Database health check failed", e)
+
+            false
+
+        }
 
     }
 
@@ -251,19 +271,29 @@ class LocalMediaRepository private constructor(
 
                         val liveCategories = client.fetchLiveCategories()
 
-                        val liveCatMap = liveCategories.associate { it.id to it.name }
-
 
 
                         notifyProgress(onProgress, SyncProgress("Downloading Live TV channels..."))
 
-                        val liveStreams = client.fetchLiveStreams(liveCatMap)
+                        var liveSaved = 0
 
-                        totalInserted += insertInBatches(liveStreams) { count ->
+                        client.fetchLiveStreamsByCategory(liveCategories) { categoryName, items ->
 
-                            notifyProgress(onProgress, SyncProgress("Saving Live TV channels...", count))
+                            liveSaved += insertInBatches(items) { count ->
+
+                                notifyProgress(
+
+                                    onProgress,
+
+                                    SyncProgress("Saving Live TV: $categoryName...", liveSaved + count),
+
+                                )
+
+                            }
 
                         }
+
+                        totalInserted += liveSaved
 
 
 
@@ -277,13 +307,25 @@ class LocalMediaRepository private constructor(
 
                         notifyProgress(onProgress, SyncProgress("Downloading movies..."))
 
-                        val vodStreams = client.fetchVodStreams(vodCatMap)
+                        var vodSaved = 0
 
-                        totalInserted += insertInBatches(vodStreams) { count ->
+                        client.fetchVodStreamsByCategory(vodCategories) { categoryName, items ->
 
-                            notifyProgress(onProgress, SyncProgress("Saving movies...", count))
+                            vodSaved += insertInBatches(items) { count ->
+
+                                notifyProgress(
+
+                                    onProgress,
+
+                                    SyncProgress("Saving movies: $categoryName...", vodSaved + count),
+
+                                )
+
+                            }
 
                         }
+
+                        totalInserted += vodSaved
 
 
 
@@ -480,7 +522,7 @@ class LocalMediaRepository private constructor(
 
             plexCount = dao.countBySource(MediaSource.PLEX.name),
 
-            favoriteCount = dao.getFavorites(Int.MAX_VALUE).size,
+            favoriteCount = dao.countFavorites(),
 
             liveCategories = listOf(ChannelCategory("all", "All Channels")) + liveCategories,
 

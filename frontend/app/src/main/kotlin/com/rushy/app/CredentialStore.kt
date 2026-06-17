@@ -82,6 +82,20 @@ class CredentialStore(context: Context) {
         isDemoMode = false
     }
 
+    /**
+     * Applies [DefaultCredentials] on first launch so test installs skip the wizard.
+     */
+    fun ensureDevCredentialsIfNeeded() {
+        if (!DefaultCredentials.AUTO_APPLY) return
+        if (isConfigured()) return
+        saveXtream(
+            DefaultCredentials.PORTAL_URL,
+            DefaultCredentials.USERNAME,
+            DefaultCredentials.PASSWORD,
+        )
+        completeSetup()
+    }
+
     companion object {
         private const val PREFS_NAME = "rushy_credentials"
         private const val KEY_XTREAM_PORTAL = "xtream_portal"

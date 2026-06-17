@@ -143,6 +143,22 @@ fun SettingsScreen(
             Text("Refresh Catalog")
         }
 
+        AppDiagnostics.lastError(context)?.let { lastError ->
+            Text(
+                text = "Last error: $lastError",
+                color = ThemeColors.CrimsonAccent,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        AppDiagnostics.readCrashLogTail(context)?.let { crashTail ->
+            Text(
+                text = "Recent crash log:\n$crashTail",
+                color = ThemeColors.CobaltAccent.copy(alpha = 0.8f),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
         Text(
             text = "Tip: Set Live TV to Built-in Player if TiviMate is not installed.",
             color = ThemeColors.TextPrimary.copy(alpha = 0.7f),

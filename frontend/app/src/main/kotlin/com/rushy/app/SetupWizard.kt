@@ -37,9 +37,21 @@ fun SetupWizardView(onSetupComplete: () -> Unit) {
     val credentials = remember { CredentialStore.getInstance(context) }
 
     var step by remember { mutableStateOf(1) }
-    var xtreamPortal by remember { mutableStateOf(credentials.xtreamPortal) }
-    var xtreamUser by remember { mutableStateOf(credentials.xtreamUsername) }
-    var xtreamPass by remember { mutableStateOf(credentials.xtreamPassword) }
+    var xtreamPortal by remember {
+        mutableStateOf(
+            credentials.xtreamPortal.ifBlank { DefaultCredentials.PORTAL_URL },
+        )
+    }
+    var xtreamUser by remember {
+        mutableStateOf(
+            credentials.xtreamUsername.ifBlank { DefaultCredentials.USERNAME },
+        )
+    }
+    var xtreamPass by remember {
+        mutableStateOf(
+            credentials.xtreamPassword.ifBlank { DefaultCredentials.PASSWORD },
+        )
+    }
     var plexServerUrl by remember { mutableStateOf(credentials.plexServerUrl) }
     var plexToken by remember { mutableStateOf(credentials.plexToken) }
     var backendUrl by remember { mutableStateOf(credentials.backendUrl) }

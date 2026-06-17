@@ -109,6 +109,9 @@ interface MediaDao {
     @Query("SELECT COUNT(*) FROM media_items")
     suspend fun totalCount(): Int
 
+    @Query("SELECT COUNT(*) FROM media_items WHERE is_favorite = 1 AND is_hidden = 0")
+    suspend fun countFavorites(): Int
+
     @Query("SELECT * FROM media_items WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): MediaItemEntity?
 }

@@ -35,6 +35,35 @@ data class SyncProgress(
 )
 
 @Composable
+fun SyncErrorView(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "Sync failed",
+            style = MaterialTheme.typography.headlineSmall,
+            color = ThemeColors.CrimsonAccent,
+        )
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = ThemeColors.TextPrimary,
+        )
+        Button(onClick = onRetry) {
+            Text("Retry")
+        }
+    }
+}
+
+@Composable
 fun SyncProgressView(
     progress: SyncProgress,
     modifier: Modifier = Modifier,

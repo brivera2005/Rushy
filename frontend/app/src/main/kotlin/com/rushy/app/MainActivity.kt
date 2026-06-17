@@ -80,11 +80,17 @@ import androidx.tv.material3.Surface
 
 import androidx.tv.material3.Text
 
+import kotlinx.coroutines.CoroutineExceptionHandler
+
 import kotlinx.coroutines.Dispatchers
+
+import kotlinx.coroutines.SupervisorJob
 
 import kotlinx.coroutines.delay
 
 import kotlinx.coroutines.launch
+
+import kotlinx.coroutines.plus
 
 import kotlinx.coroutines.withContext
 
@@ -160,7 +166,7 @@ class MainActivity : ComponentActivity() {
 
             val context = LocalContext.current
 
-            val credentials = remember { CredentialStore.getInstance(context) }
+            val credentials = remember { CredentialStore.getInstance(context).also { it.ensureDevCredentialsIfNeeded() } }
 
             var isConfigured by remember { mutableStateOf(credentials.isConfigured()) }
 
@@ -242,6 +248,10 @@ class MainActivity : ComponentActivity() {
 
 
 
+private enum class AppInitPhase { Preparing, Ready, Failed }
+
+
+
 @Composable
 
 fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
@@ -253,6 +263,12 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
     val scope = rememberCoroutineScope()
 
     var repository by remember { mutableStateOf<LocalMediaRepository?>(null) }
+
+    var initPhase by remember { mutableStateOf(AppInitPhase.Preparing) }
+
+    var initError by remember { mutableStateOf<String?>(null) }
+
+    var startupAttempt by remember { mutableIntStateOf(0) }
 
     val credentials = remember { CredentialStore.getInstance(context) }
 
@@ -272,7 +288,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
     var summary by remember { mutableStateOf<CatalogSummary?>(null) }
 
-    var isLoading by remember { mutableStateOf(true) }
+    var isSyncing by remember { mutableStateOf(false) }
 
     var isRefreshing by remember { mutableStateOf(false) }
 
@@ -295,6 +311,32 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
     var downloadProgress by remember { mutableIntStateOf(-1) }
 
     val activeAccentColor = LocalRushyTheme.current.currentAccentColor
+
+
+
+    val syncExceptionHandler = remember {
+
+        CoroutineExceptionHandler { _, throwable ->
+
+            scope.launch(Dispatchers.Main.immediate) {
+
+                val msg = throwable.message ?: "Sync failed."
+
+                errorMessage = msg
+
+                isSyncing = false
+
+                isRefreshing = false
+
+                AppDiagnostics.recordError(context, msg)
+
+            }
+
+        }
+
+    }
+
+    val syncScope = remember(scope) { scope + SupervisorJob() + syncExceptionHandler }
 
 
 
@@ -416,45 +458,69 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
         val repo = repository ?: return
 
-        scope.launch {
+        syncScope.launch {
 
-            if (showRefreshIndicator) isRefreshing = true else isLoading = true
+            withContext(Dispatchers.Main.immediate) {
 
-            errorMessage = null
+                if (showRefreshIndicator) isRefreshing = true
+
+                isSyncing = true
+
+                errorMessage = null
+
+            }
 
             try {
 
-                summary = repo.syncCatalog { progress ->
+                val result = repo.syncCatalog { progress ->
 
-                    syncProgress = progress
+                    scope.launch(Dispatchers.Main.immediate) {
+
+                        syncProgress = progress
+
+                    }
+
+                }
+
+                withContext(Dispatchers.Main.immediate) {
+
+                    summary = result
+
+                    AppDiagnostics.clearError(context)
 
                 }
 
             } catch (e: Exception) {
 
-                errorMessage = e.message ?: "Sync failed."
+                val msg = e.message ?: "Sync failed."
 
-                try {
+                withContext(Dispatchers.Main.immediate) {
 
-                    summary = repo.getSummary()
+                    errorMessage = msg
 
-                } catch (_: Exception) {
+                    AppDiagnostics.recordError(context, msg)
 
-                    summary = CatalogSummary()
+                    try {
 
-                }
+                        summary = repo.getSummary()
 
-                if ((summary?.liveCount ?: 0) == 0 && (summary?.movieCount ?: 0) == 0) {
+                    } catch (_: Exception) {
 
-                    Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+                        summary = summary ?: CatalogSummary()
+
+                    }
 
                 }
 
             } finally {
 
-                isLoading = false
+                withContext(Dispatchers.Main.immediate) {
 
-                isRefreshing = false
+                    isSyncing = false
+
+                    isRefreshing = false
+
+                }
 
             }
 
@@ -472,25 +538,67 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(startupAttempt) {
+
+        initPhase = AppInitPhase.Preparing
+
+        initError = null
 
         syncProgress = SyncProgress("Preparing app...")
 
-        delay(400)
+        delay(300)
 
-        repository = withContext(Dispatchers.IO) {
+        try {
 
-            LocalMediaRepository.getInstance(context)
+            val repo = withContext(Dispatchers.IO) {
 
-        }
+                val instance = LocalMediaRepository.getInstance(context)
 
-        loadCatalog()
+                if (!instance.verifyDatabaseHealth()) {
 
-        if (updatePrefs.checkOnStartup) {
+                    throw SyncException("Local database failed health check.")
 
-            delay(1200)
+                }
 
-            checkForUpdates(autoInstall = true)
+                instance
+
+            }
+
+            repository = repo
+
+            val cached = withContext(Dispatchers.IO) { repo.getSummary() }
+
+            summary = cached
+
+            initPhase = AppInitPhase.Ready
+
+            val isEmpty = cached.liveCount + cached.movieCount + cached.plexCount == 0
+
+            if (isEmpty) {
+
+                delay(400)
+
+                loadCatalog()
+
+            }
+
+            if (updatePrefs.checkOnStartup) {
+
+                delay(1200)
+
+                checkForUpdates(autoInstall = true)
+
+            }
+
+        } catch (e: Exception) {
+
+            val msg = e.message ?: "Failed to start app."
+
+            initError = msg
+
+            initPhase = AppInitPhase.Failed
+
+            AppDiagnostics.recordError(context, msg)
 
         }
 
@@ -498,31 +606,69 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-    val repo = repository
+    when (initPhase) {
 
-    if (repo == null) {
+        AppInitPhase.Preparing -> {
 
-        Box(
+            Box(
 
-            modifier = Modifier
+                modifier = Modifier
 
-                .fillMaxSize()
+                    .fillMaxSize()
 
-                .background(ThemeColors.DarkBackground)
+                    .background(ThemeColors.DarkBackground)
 
-                .padding(24.dp),
+                    .padding(24.dp),
 
-            contentAlignment = Alignment.Center,
+                contentAlignment = Alignment.Center,
 
-        ) {
+            ) {
 
-            SyncProgressView(progress = syncProgress)
+                SyncProgressView(progress = syncProgress)
+
+            }
+
+            return
 
         }
 
-        return
+        AppInitPhase.Failed -> {
+
+            Box(
+
+                modifier = Modifier
+
+                    .fillMaxSize()
+
+                    .background(ThemeColors.DarkBackground)
+
+                    .padding(24.dp),
+
+                contentAlignment = Alignment.Center,
+
+            ) {
+
+                SyncErrorView(
+
+                    message = initError ?: "Failed to start app.",
+
+                    onRetry = { startupAttempt++ },
+
+                )
+
+            }
+
+            return
+
+        }
+
+        AppInitPhase.Ready -> Unit
 
     }
+
+
+
+    val repo = repository ?: return
 
 
 
@@ -660,21 +806,15 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-            if (isLoading) {
+            if (isSyncing) {
 
                 SyncProgressView(
 
                     progress = syncProgress,
 
-                    modifier = Modifier
-
-                        .fillMaxWidth()
-
-                        .weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
 
                 )
-
-                return@Column
 
             }
 
@@ -682,25 +822,83 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
             errorMessage?.let { message ->
 
-                Text(
+                Row(
 
-                    text = message,
+                    modifier = Modifier.fillMaxWidth(),
 
-                    style = MaterialTheme.typography.bodySmall,
+                    horizontalArrangement = Arrangement.SpaceBetween,
 
-                    color = ThemeColors.CrimsonAccent,
+                    verticalAlignment = Alignment.CenterVertically,
 
-                )
+                ) {
+
+                    Text(
+
+                        text = "Sync failed: $message",
+
+                        style = MaterialTheme.typography.bodySmall,
+
+                        color = ThemeColors.CrimsonAccent,
+
+                        modifier = Modifier.weight(1f),
+
+                    )
+
+                    Button(onClick = { loadCatalog(showRefreshIndicator = true) }) {
+
+                        Text("Retry")
+
+                    }
+
+                }
 
             }
 
 
 
-            val catalog = summary ?: return@Column
+            val catalog = summary ?: CatalogSummary()
 
 
 
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+
+                if (!isSyncing && catalog.liveCount + catalog.movieCount + catalog.plexCount == 0) {
+
+                    Column(
+
+                        modifier = Modifier.fillMaxSize(),
+
+                        verticalArrangement = Arrangement.Center,
+
+                        horizontalAlignment = Alignment.CenterHorizontally,
+
+                    ) {
+
+                        Text(
+
+                            text = "No catalog loaded yet.",
+
+                            style = MaterialTheme.typography.titleMedium,
+
+                            color = ThemeColors.TextPrimary,
+
+                        )
+
+                        Button(
+
+                            onClick = { loadCatalog(showRefreshIndicator = true) },
+
+                            modifier = Modifier.padding(top = 16.dp),
+
+                        ) {
+
+                            Text("Sync Catalog")
+
+                        }
+
+                    }
+
+                } else {
 
                 when (currentScreen) {
 
@@ -773,6 +971,8 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
                         },
 
                     )
+
+                }
 
                 }
 

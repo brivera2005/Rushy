@@ -158,29 +158,51 @@ class EpgRepository private constructor(
     fun getProgramsForChannel(channelId: String): List<EpgProgram> =
         cachedPrograms[channelId].orEmpty()
 
+    suspend fun getOrFetchEpg(channel: MediaItem): List<EpgProgram> = withContext(Dispatchers.IO) {
+        cachedPrograms[channel.playbackId]?.let { return@withContext it }
+        if (credentials.isDemoMode || !credentials.hasXtreamCredentials()) {
+            return@withContext demoEpgForChannel(channel)
+        }
+        val client = XtreamClient(
+            credentials.xtreamPortal,
+            credentials.xtreamUsername,
+            credentials.xtreamPassword,
+        )
+        val programs = client.fetchEpgForChannel(channel)
+        if (programs.isNotEmpty()) {
+            cachedPrograms = cachedPrograms + (channel.playbackId to programs)
+            saveCache()
+        }
+        programs
+    }
+
     suspend fun refreshEpg(channels: List<MediaItem>): Map<String, List<EpgProgram>> =
         withContext(Dispatchers.IO) {
             if (credentials.isDemoMode || !credentials.hasXtreamCredentials()) {
                 return@withContext demoEpg(channels)
             }
 
-            val now = System.currentTimeMillis()
-            if (cachedPrograms.isNotEmpty() && now - cacheTimestamp < CACHE_TTL_MS) {
-                return@withContext cachedPrograms
+            val result = mutableMapOf<String, List<EpgProgram>>()
+            channels.take(40).forEach { channel ->
+                result[channel.playbackId] = getOrFetchEpg(channel)
             }
-
-            val client = XtreamClient(
-                credentials.xtreamPortal,
-                credentials.xtreamUsername,
-                credentials.xtreamPassword,
-            )
-            val liveChannels = channels.filter { it.source == MediaSource.XTREAM_LIVE }
-            val fetched = client.fetchEpgForChannels(liveChannels.take(80))
-            cachedPrograms = fetched
-            cacheTimestamp = now
-            saveCache()
-            fetched
+            result
         }
+
+    private fun demoEpgForChannel(channel: MediaItem): List<EpgProgram> {
+        val now = System.currentTimeMillis() / 1000
+        return (0 until 3).map { index ->
+            val start = now + index * 3600L
+            EpgProgram(
+                id = "${channel.id}_$index",
+                channelId = channel.playbackId,
+                title = "Program ${index + 1}",
+                description = "Demo guide for ${channel.title}",
+                startEpochSec = start,
+                endEpochSec = start + 3600,
+            )
+        }
+    }
 
     private fun demoEpg(channels: List<MediaItem>): Map<String, List<EpgProgram>> {
         val now = System.currentTimeMillis() / 1000

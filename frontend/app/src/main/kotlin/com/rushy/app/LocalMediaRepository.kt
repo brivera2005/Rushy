@@ -1,234 +1,287 @@
-package com.rushy.app
-
-import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.File
-
-class SyncException(message: String, cause: Throwable? = null) : Exception(message, cause)
-
-class LocalMediaRepository private constructor(
-    private val context: Context,
-    private val credentials: CredentialStore,
-) {
-    private val gson = Gson()
-    private val cacheFile = File(context.filesDir, "media_cache.json")
-    private val flagsFile = File(context.filesDir, "media_flags.json")
-
-    private var cachedItems: List<MediaItem> = emptyList()
-    private var itemFlags: MutableMap<String, ItemFlags> = mutableMapOf()
-
-    init {
-        loadFromDisk()
-    }
-
-    fun getAllItems(): List<MediaItem> = applyFlags(cachedItems).filterNot { it.isHidden }
-
-    fun getDashboard(): DashboardData {
-        val items = getAllItems()
-        val favorites = items.filter { it.isFavorite }
-        val liveTv = items.filter { it.source == MediaSource.XTREAM_LIVE }
-        val movies = items.filter {
-            it.source == MediaSource.XTREAM_VOD || it.source == MediaSource.XTREAM_SERIES
-        }
-        val plexLibrary = items.filter { it.source == MediaSource.PLEX }
-        val categories = buildCategories(liveTv)
-        val categoryGroups = buildCategoryGroups(liveTv, categories)
-        return DashboardData(
-            favorites = favorites,
-            liveTv = liveTv,
-            movies = movies,
-            plexLibrary = plexLibrary,
-            categories = categories,
-            categoryGroups = categoryGroups,
-        )
-    }
-
-    private fun buildCategories(liveTv: List<MediaItem>): List<ChannelCategory> {
-        return liveTv
-            .mapNotNull { item ->
-                val id = item.categoryId ?: return@mapNotNull null
-                val name = item.categoryName ?: "Category $id"
-                ChannelCategory(id, name)
-            }
-            .distinctBy { it.id }
-            .sortedBy { it.name }
-    }
-
-    private fun buildCategoryGroups(
-        liveTv: List<MediaItem>,
-        categories: List<ChannelCategory>,
-    ): List<CategoryGroup> {
-        val uncategorized = ChannelCategory("all", "All Channels")
-        val allCategories = listOf(uncategorized) + categories
-        return allCategories.map { category ->
-            val channels = if (category.id == "all") {
-                liveTv
-            } else {
-                liveTv.filter { it.categoryId == category.id }
-            }
-            CategoryGroup(category, channels)
-        }.filter { it.channels.isNotEmpty() }
-    }
-
-    fun search(query: String): SearchResult = LocalSearchEngine.search(getAllItems(), query)
-
-    suspend fun syncCatalog(): DashboardData = withContext(Dispatchers.IO) {
-        if (credentials.isDemoMode) {
-            cachedItems = demoCatalog()
-            saveToDisk()
-            return@withContext getDashboard()
-        }
-
-        val merged = mutableListOf<MediaItem>()
-        var xtreamError: String? = null
-        var plexError: String? = null
-
-        if (credentials.hasXtreamCredentials()) {
-            try {
-                val client = XtreamClient(
-                    credentials.xtreamPortal,
-                    credentials.xtreamUsername,
-                    credentials.xtreamPassword,
-                )
-                if (!client.validateCredentials()) {
-                    throw SyncException("Xtream credentials rejected by portal.")
-                }
-                val liveCategories = client.fetchLiveCategories()
-                val vodCategories = client.fetchVodCategories()
-                val liveCatMap = liveCategories.associate { it.id to it.name }
-                val vodCatMap = vodCategories.associate { it.id to it.name }
-                merged.addAll(client.fetchLiveStreams(liveCatMap))
-                merged.addAll(client.fetchVodStreams(vodCatMap))
-                merged.addAll(client.fetchSeries(vodCatMap))
-            } catch (e: Exception) {
-                xtreamError = e.message ?: "Xtream sync failed."
-            }
-        }
-
-        if (credentials.hasPlexCredentials()) {
-            try {
-                val client = PlexClient(credentials.plexServerUrl, credentials.plexToken)
-                if (!client.validateCredentials()) {
-                    throw SyncException("Plex token or server URL is invalid.")
-                }
-                merged.addAll(client.fetchLibraryItems())
-            } catch (e: Exception) {
-                plexError = e.message ?: "Plex sync failed."
-            }
-        }
-
-        if (merged.isEmpty() && (xtreamError != null || plexError != null)) {
-            val parts = listOfNotNull(xtreamError, plexError)
-            throw SyncException(parts.joinToString(" "))
-        }
-
-        cachedItems = merged
-        saveToDisk()
-        getDashboard()
-    }
-
-    fun toggleFavorite(itemId: String, favorite: Boolean) {
-        val flags = itemFlags.getOrPut(itemId) { ItemFlags() }
-        flags.isFavorite = favorite
-        saveFlags()
-    }
-
-    fun toggleHidden(itemId: String, hidden: Boolean) {
-        val flags = itemFlags.getOrPut(itemId) { ItemFlags() }
-        flags.isHidden = hidden
-        saveFlags()
-    }
-
-    private fun applyFlags(items: List<MediaItem>): List<MediaItem> {
-        return items.map { item ->
-            val flags = itemFlags[item.id]
-            item.copy(
-                isFavorite = flags?.isFavorite ?: item.isFavorite,
-                isHidden = flags?.isHidden ?: item.isHidden,
-            )
-        }
-    }
-
-    private fun loadFromDisk() {
-        cachedItems = readJsonList(cacheFile)
-        itemFlags = readJsonMap(flagsFile)
-    }
-
-    private fun saveToDisk() {
-        writeJson(cacheFile, cachedItems)
-    }
-
-    private fun saveFlags() {
-        writeJson(flagsFile, itemFlags)
-    }
-
-    private fun readJsonList(file: File): List<MediaItem> {
-        if (!file.exists()) return emptyList()
-        return runCatching {
-            val type = object : TypeToken<List<MediaItem>>() {}.type
-            gson.fromJson<List<MediaItem>>(file.readText(), type) ?: emptyList()
-        }.getOrDefault(emptyList())
-    }
-
-    private fun readJsonMap(file: File): MutableMap<String, ItemFlags> {
-        if (!file.exists()) return mutableMapOf()
-        return runCatching {
-            val type = object : TypeToken<Map<String, ItemFlags>>() {}.type
-            gson.fromJson<Map<String, ItemFlags>>(file.readText(), type)?.toMutableMap()
-                ?: mutableMapOf()
-        }.getOrDefault(mutableMapOf())
-    }
-
-    private fun writeJson(file: File, data: Any) {
-        file.writeText(gson.toJson(data))
-    }
-
-    private fun demoCatalog(): List<MediaItem> {
-        val live = (1..12).map { index ->
-            MediaItem(
-                id = "demo_live_$index",
-                title = "Demo Live Channel $index",
-                source = MediaSource.DEMO,
-                playbackId = "demo_$index",
-            )
-        }
-        val movies = (1..10).map { index ->
-            MediaItem(
-                id = "demo_vod_$index",
-                title = "Demo Movie $index",
-                source = MediaSource.DEMO,
-                playbackId = "demo_movie_$index",
-            )
-        }
-        val plex = (1..8).map { index ->
-            MediaItem(
-                id = "demo_plex_$index",
-                title = "Demo Plex Title $index",
-                source = MediaSource.DEMO,
-                playbackId = "demo_plex_$index",
-            )
-        }
-        return live + movies + plex
-    }
-
-    data class ItemFlags(
-        var isFavorite: Boolean = false,
-        var isHidden: Boolean = false,
-    )
-
-    companion object {
-        @Volatile
-        private var instance: LocalMediaRepository? = null
-
-        fun getInstance(context: Context): LocalMediaRepository {
-            return instance ?: synchronized(this) {
-                val creds = CredentialStore.getInstance(context)
-                instance ?: LocalMediaRepository(context.applicationContext, creds)
-                    .also { instance = it }
-            }
-        }
-    }
-}
+package com.rushy.app
+
+import android.content.Context
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+
+class SyncException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+class LocalMediaRepository private constructor(
+    private val context: Context,
+    private val credentials: CredentialStore,
+) {
+    private val dao = MediaDatabase.getInstance(context).mediaDao()
+    private val legacyCacheFile = File(context.filesDir, "media_cache.json")
+    private val legacyFlagsFile = File(context.filesDir, "media_flags.json")
+
+    init {
+        runCatching { legacyCacheFile.delete() }
+        runCatching { legacyFlagsFile.delete() }
+    }
+
+    suspend fun getSummary(): CatalogSummary = withContext(Dispatchers.IO) {
+        buildSummary()
+    }
+
+    suspend fun getLiveChannels(
+        categoryId: String = "all",
+        search: String = "",
+        offset: Int = 0,
+        limit: Int = PAGE_SIZE,
+    ): List<MediaItem> = withContext(Dispatchers.IO) {
+        dao.getItemsPaged(
+            MediaSource.XTREAM_LIVE.name,
+            categoryId,
+            search.trim(),
+            limit,
+            offset,
+        ).map { it.toMediaItem() }
+    }
+
+    suspend fun getVodItems(
+        categoryId: String = "all",
+        search: String = "",
+        offset: Int = 0,
+        limit: Int = PAGE_SIZE,
+    ): List<MediaItem> = withContext(Dispatchers.IO) {
+        val vod = dao.getItemsPaged(MediaSource.XTREAM_VOD.name, categoryId, search.trim(), limit, offset)
+        val series = if (offset == 0 && categoryId == "all" && search.isBlank()) {
+            dao.getItemsPaged(MediaSource.XTREAM_SERIES.name, categoryId, search.trim(), limit, 0)
+        } else {
+            emptyList()
+        }
+        (vod + series).map { it.toMediaItem() }
+    }
+
+    suspend fun getItemsBySource(
+        source: MediaSource,
+        categoryId: String = "all",
+        search: String = "",
+        offset: Int = 0,
+        limit: Int = PAGE_SIZE,
+    ): List<MediaItem> = withContext(Dispatchers.IO) {
+        dao.getItemsPaged(source.name, categoryId, search.trim(), limit, offset).map { it.toMediaItem() }
+    }
+
+    suspend fun countInCategory(source: MediaSource, categoryId: String, search: String = ""): Int =
+        withContext(Dispatchers.IO) {
+            dao.countInCategory(source.name, categoryId, search.trim())
+        }
+
+    suspend fun getFavorites(limit: Int = 24): List<MediaItem> = withContext(Dispatchers.IO) {
+        dao.getFavorites(limit).map { it.toMediaItem() }
+    }
+
+    suspend fun getFeaturedLive(limit: Int = 12): List<MediaItem> = withContext(Dispatchers.IO) {
+        dao.getRandomFeatured(MediaSource.XTREAM_LIVE.name, limit).map { it.toMediaItem() }
+    }
+
+    suspend fun search(query: String, limit: Int = 80): SearchResult = withContext(Dispatchers.IO) {
+        val normalized = query.trim()
+        if (normalized.isBlank()) return@withContext SearchResult()
+        val sqlResults = dao.searchAll(normalized, limit).map { it.toMediaItem() }
+        LocalSearchEngine.search(sqlResults, normalized)
+    }
+
+    suspend fun syncCatalog(onProgress: (SyncProgress) -> Unit = {}): CatalogSummary =
+        withContext(Dispatchers.IO) {
+            try {
+                if (credentials.isDemoMode) {
+                    onProgress(SyncProgress("Loading demo catalog..."))
+                    seedDemoCatalog()
+                    return@withContext buildSummary()
+                }
+
+                var xtreamError: String? = null
+                var plexError: String? = null
+                var totalInserted = 0
+
+                if (credentials.hasXtreamCredentials()) {
+                    try {
+                        onProgress(SyncProgress("Validating credentials..."))
+                        val client = XtreamClient(
+                            credentials.xtreamPortal,
+                            credentials.xtreamUsername,
+                            credentials.xtreamPassword,
+                        )
+                        if (!client.validateCredentials()) {
+                            throw SyncException("Xtream credentials rejected by portal.")
+                        }
+
+                        dao.deleteBySources(
+                            listOf(
+                                MediaSource.XTREAM_LIVE.name,
+                                MediaSource.XTREAM_VOD.name,
+                                MediaSource.XTREAM_SERIES.name,
+                            ),
+                        )
+
+                        onProgress(SyncProgress("Loading Live TV categories..."))
+                        val liveCategories = client.fetchLiveCategories()
+                        val liveCatMap = liveCategories.associate { it.id to it.name }
+
+                        onProgress(SyncProgress("Downloading Live TV channels..."))
+                        val liveStreams = client.fetchLiveStreams(liveCatMap)
+                        totalInserted += insertInBatches(liveStreams) { count ->
+                            onProgress(SyncProgress("Saving Live TV channels...", count))
+                        }
+
+                        onProgress(SyncProgress("Loading movie categories..."))
+                        val vodCategories = client.fetchVodCategories()
+                        val vodCatMap = vodCategories.associate { it.id to it.name }
+
+                        onProgress(SyncProgress("Downloading movies..."))
+                        val vodStreams = client.fetchVodStreams(vodCatMap)
+                        totalInserted += insertInBatches(vodStreams) { count ->
+                            onProgress(SyncProgress("Saving movies...", count))
+                        }
+
+                        onProgress(SyncProgress("Downloading series..."))
+                        val series = client.fetchSeries(vodCatMap)
+                        totalInserted += insertInBatches(series) { count ->
+                            onProgress(SyncProgress("Saving series...", count))
+                        }
+
+                        Log.i(TAG, "Xtream sync complete: $totalInserted items")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Xtream sync failed", e)
+                        xtreamError = e.message ?: "Xtream sync failed."
+                    }
+                }
+
+                if (credentials.hasPlexCredentials()) {
+                    try {
+                        onProgress(SyncProgress("Syncing Plex library..."))
+                        val client = PlexClient(credentials.plexServerUrl, credentials.plexToken)
+                        if (!client.validateCredentials()) {
+                            throw SyncException("Plex token or server URL is invalid.")
+                        }
+                        dao.deleteBySources(listOf(MediaSource.PLEX.name))
+                        val plexItems = client.fetchLibraryItems()
+                        insertInBatches(plexItems) { count ->
+                            onProgress(SyncProgress("Saving Plex items...", count))
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Plex sync failed", e)
+                        plexError = e.message ?: "Plex sync failed."
+                    }
+                }
+
+                val summary = buildSummary()
+                if (summary.liveCount + summary.movieCount + summary.plexCount == 0 &&
+                    (xtreamError != null || plexError != null)
+                ) {
+                    throw SyncException(listOfNotNull(xtreamError, plexError).joinToString(" "))
+                }
+
+                onProgress(SyncProgress("Ready!", summary.liveCount + summary.movieCount + summary.plexCount))
+                summary
+            } catch (e: Exception) {
+                Log.e(TAG, "Catalog sync failed", e)
+                throw if (e is SyncException) e else SyncException(e.message ?: "Sync failed.", e)
+            }
+        }
+
+    suspend fun toggleFavorite(itemId: String, favorite: Boolean) = withContext(Dispatchers.IO) {
+        dao.setFavorite(itemId, favorite)
+    }
+
+    suspend fun toggleHidden(itemId: String, hidden: Boolean) = withContext(Dispatchers.IO) {
+        dao.setHidden(itemId, hidden)
+    }
+
+    private suspend fun insertInBatches(
+        items: List<MediaItem>,
+        onBatch: (Int) -> Unit,
+    ): Int {
+        var total = 0
+        items.chunked(BATCH_SIZE).forEach { chunk ->
+            dao.insertAll(chunk.map { it.toEntity() })
+            total += chunk.size
+            onBatch(total)
+        }
+        return total
+    }
+
+    private suspend fun seedDemoCatalog() {
+        dao.deleteBySources(
+            listOf(
+                MediaSource.DEMO.name,
+                MediaSource.XTREAM_LIVE.name,
+                MediaSource.XTREAM_VOD.name,
+                MediaSource.XTREAM_SERIES.name,
+                MediaSource.PLEX.name,
+            ),
+        )
+        insertInBatches(demoCatalog()) {}
+    }
+
+    private suspend fun buildSummary(): CatalogSummary {
+        val liveCategories = dao.getCategories(MediaSource.XTREAM_LIVE.name).map {
+            ChannelCategory(it.categoryId, it.categoryName ?: "Category ${it.categoryId}")
+        }
+        val vodCategories = dao.getCategories(MediaSource.XTREAM_VOD.name).map {
+            ChannelCategory(it.categoryId, it.categoryName ?: "Category ${it.categoryId}")
+        } + dao.getCategories(MediaSource.XTREAM_SERIES.name).map {
+            ChannelCategory(it.categoryId, it.categoryName ?: "Series ${it.categoryId}")
+        }.distinctBy { it.id }
+
+        return CatalogSummary(
+            liveCount = dao.countBySource(MediaSource.XTREAM_LIVE.name),
+            vodCount = dao.countBySource(MediaSource.XTREAM_VOD.name),
+            seriesCount = dao.countBySource(MediaSource.XTREAM_SERIES.name),
+            plexCount = dao.countBySource(MediaSource.PLEX.name),
+            favoriteCount = dao.getFavorites(Int.MAX_VALUE).size,
+            liveCategories = listOf(ChannelCategory("all", "All Channels")) + liveCategories,
+            vodCategories = listOf(ChannelCategory("all", "All")) + vodCategories.distinctBy { it.id },
+        )
+    }
+
+    private fun demoCatalog(): List<MediaItem> {
+        val live = (1..12).map { index ->
+            MediaItem(
+                id = "demo_live_$index",
+                title = "Demo Live Channel $index",
+                source = MediaSource.DEMO,
+                playbackId = "demo_$index",
+            )
+        }
+        val movies = (1..10).map { index ->
+            MediaItem(
+                id = "demo_vod_$index",
+                title = "Demo Movie $index",
+                source = MediaSource.DEMO,
+                playbackId = "demo_movie_$index",
+            )
+        }
+        val plex = (1..8).map { index ->
+            MediaItem(
+                id = "demo_plex_$index",
+                title = "Demo Plex Title $index",
+                source = MediaSource.DEMO,
+                playbackId = "demo_plex_$index",
+            )
+        }
+        return live + movies + plex
+    }
+
+    companion object {
+        private const val TAG = "LocalMediaRepository"
+        private const val BATCH_SIZE = 400
+        const val PAGE_SIZE = 60
+
+        @Volatile
+        private var instance: LocalMediaRepository? = null
+
+        fun getInstance(context: Context): LocalMediaRepository {
+            return instance ?: synchronized(this) {
+                val creds = CredentialStore.getInstance(context)
+                instance ?: LocalMediaRepository(context.applicationContext, creds)
+                    .also { instance = it }
+            }
+        }
+    }
+}
+

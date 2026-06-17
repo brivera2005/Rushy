@@ -205,24 +205,20 @@ fun SetupWizardView(onSetupComplete: () -> Unit) {
                                             credentials.backendUrl = backendUrl
                                         }
                                         credentials.completeSetup()
-                                        val repo = LocalMediaRepository.getInstance(context)
-                                        repo.syncCatalog()
                                         onSetupComplete()
                                     } catch (e: Exception) {
                                         Toast.makeText(
                                             context,
-                                            e.message ?: "Sync failed. Check credentials.",
+                                            e.message ?: "Setup failed.",
                                             Toast.LENGTH_LONG,
                                         ).show()
-                                        credentials.completeSetup()
-                                        onSetupComplete()
                                     } finally {
                                         isSubmitting = false
                                     }
                                 }
                             },
                         ) {
-                            Text(if (isSubmitting) "Syncing..." else "Finish Setup")
+                            Text(if (isSubmitting) "Saving..." else "Finish Setup")
                         }
                     }
                 }

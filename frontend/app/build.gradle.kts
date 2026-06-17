@@ -6,6 +6,25 @@
 
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
+
+val defaultCredentialsFile = file("src/main/kotlin/com/rushy/app/DefaultCredentials.kt")
+val defaultCredentialsExample = file("src/main/kotlin/com/rushy/app/DefaultCredentials.kt.example")
+
+tasks.register("ensureDefaultCredentials") {
+    doLast {
+        if (!defaultCredentialsFile.exists() && defaultCredentialsExample.exists()) {
+            defaultCredentialsExample.copyTo(defaultCredentialsFile)
+        }
+        if (!defaultCredentialsFile.exists()) {
+            throw GradleException(
+                "Missing DefaultCredentials.kt. Copy DefaultCredentials.kt.example to DefaultCredentials.kt."
+            )
+        }
+    }
+}
+
+tasks.named("preBuild").configure { dependsOn("ensureDefaultCredentials") }
+
 android {
     namespace = "com.rushy.app"
     compileSdk = 34
@@ -14,8 +33,8 @@ android {
         applicationId = "com.rushy.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.5"
 
     }
 

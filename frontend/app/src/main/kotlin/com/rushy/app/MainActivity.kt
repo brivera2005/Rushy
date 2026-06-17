@@ -2,6 +2,8 @@
 
 
 
+import android.util.Log
+
 import android.app.Activity
 
 import android.content.Intent
@@ -454,7 +456,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-    fun loadCatalog(showRefreshIndicator: Boolean = false) {
+    fun loadCatalog(showRefreshIndicator: Boolean = false, liveOnly: Boolean = false) {
 
         val repo = repository ?: return
 
@@ -472,21 +474,52 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
             try {
 
-                val result = repo.syncCatalog { progress ->
-
-                    scope.launch(Dispatchers.Main.immediate) {
-
-                        syncProgress = progress
-
-                    }
-
-                }
+                val result = repo.syncCatalog(
+                    onProgress = { progress ->
+                        scope.launch(Dispatchers.Main.immediate) {
+                            syncProgress = progress
+                        }
+                    },
+                    liveOnly = liveOnly,
+                )
 
                 withContext(Dispatchers.Main.immediate) {
 
                     summary = result
 
                     AppDiagnostics.clearError(context)
+
+                }
+
+                if (liveOnly && result.liveCount > 0) {
+
+                    syncScope.launch {
+
+                        try {
+
+                            val full = repo.syncVodAndSeries { progress ->
+
+                                scope.launch(Dispatchers.Main.immediate) {
+
+                                    syncProgress = progress
+
+                                }
+
+                            }
+
+                            withContext(Dispatchers.Main.immediate) {
+
+                                summary = full
+
+                            }
+
+                        } catch (e: Exception) {
+
+                            Log.w("RushyApp", "Background VOD/series sync failed", e)
+
+                        }
+
+                    }
 
                 }
 
@@ -550,6 +583,26 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
         try {
 
+            val validation = withContext(Dispatchers.IO) {
+
+                StartupValidator.run(context, credentials)
+
+            }
+
+            validation.log()
+
+            if (!validation.ok) {
+
+                throw SyncException(validation.checks.lastOrNull { it.startsWith("FAIL:") }
+
+                    ?.removePrefix("FAIL: ")
+
+                    ?: "Startup validation failed.")
+
+            }
+
+
+
             val repo = withContext(Dispatchers.IO) {
 
                 val instance = LocalMediaRepository.getInstance(context)
@@ -578,7 +631,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 delay(400)
 
-                loadCatalog()
+                loadCatalog(liveOnly = true)
 
             }
 

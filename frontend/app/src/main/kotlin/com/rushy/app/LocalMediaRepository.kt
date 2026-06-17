@@ -201,7 +201,10 @@ class LocalMediaRepository private constructor(
         }
     }
 
-    suspend fun syncCatalog(onProgress: (SyncProgress) -> Unit = {}): CatalogSummary =
+    suspend fun syncCatalog(
+        onProgress: (SyncProgress) -> Unit = {},
+        liveOnly: Boolean = false,
+    ): CatalogSummary =
 
         withContext(Dispatchers.IO) {
 
@@ -230,6 +233,18 @@ class LocalMediaRepository private constructor(
                 if (credentials.hasXtreamCredentials()) {
 
                     try {
+
+                        val freeRamMb = StartupValidator.availableRamMb(context)
+
+                        Log.i(TAG, "Sync starting — ${freeRamMb}MB free RAM, liveOnly=$liveOnly")
+
+                        if (freeRamMb < 50) {
+
+                            throw SyncException("Not enough memory to sync (${freeRamMb}MB free). Close other apps and retry.")
+
+                        }
+
+
 
                         notifyProgress(onProgress, SyncProgress("Validating credentials..."))
 
@@ -295,53 +310,15 @@ class LocalMediaRepository private constructor(
 
                         totalInserted += liveSaved
 
-
-
-                        notifyProgress(onProgress, SyncProgress("Loading movie categories..."))
-
-                        val vodCategories = client.fetchVodCategories()
-
-                        val vodCatMap = vodCategories.associate { it.id to it.name }
+                        Log.i(TAG, "Live TV sync complete: $liveSaved channels")
 
 
 
-                        notifyProgress(onProgress, SyncProgress("Downloading movies..."))
+                        if (!liveOnly) {
 
-                        var vodSaved = 0
-
-                        client.fetchVodStreamsByCategory(vodCategories) { categoryName, items ->
-
-                            vodSaved += insertInBatches(items) { count ->
-
-                                notifyProgress(
-
-                                    onProgress,
-
-                                    SyncProgress("Saving movies: $categoryName...", vodSaved + count),
-
-                                )
-
-                            }
+                            syncVodAndSeries(client, onProgress) { totalInserted += it }
 
                         }
-
-                        totalInserted += vodSaved
-
-
-
-                        notifyProgress(onProgress, SyncProgress("Downloading series..."))
-
-                        val series = client.fetchSeries(vodCatMap)
-
-                        totalInserted += insertInBatches(series) { count ->
-
-                            notifyProgress(onProgress, SyncProgress("Saving series...", count))
-
-                        }
-
-
-
-                        Log.i(TAG, "Xtream sync complete: $totalInserted items")
 
                     } catch (e: Exception) {
 
@@ -421,6 +398,128 @@ class LocalMediaRepository private constructor(
             }
 
         }
+
+
+
+    suspend fun syncVodAndSeries(onProgress: (SyncProgress) -> Unit = {}): CatalogSummary =
+
+        withContext(Dispatchers.IO) {
+
+            if (credentials.isDemoMode || !credentials.hasXtreamCredentials()) {
+
+                return@withContext buildSummary()
+
+            }
+
+            try {
+
+                val client = XtreamClient(
+
+                    credentials.xtreamPortal,
+
+                    credentials.xtreamUsername,
+
+                    credentials.xtreamPassword,
+
+                )
+
+                var added = 0
+
+                syncVodAndSeries(client, onProgress) { added += it }
+
+                Log.i(TAG, "VOD/series background sync complete: $added items")
+
+                buildSummary()
+
+            } catch (e: Exception) {
+
+                Log.e(TAG, "VOD/series sync failed", e)
+
+                throw if (e is SyncException) e else SyncException(e.message ?: "VOD sync failed.", e)
+
+            }
+
+        }
+
+
+
+    private suspend fun syncVodAndSeries(
+
+        client: XtreamClient,
+
+        onProgress: (SyncProgress) -> Unit,
+
+        onInserted: (Int) -> Unit,
+
+    ) {
+
+        dao.deleteBySources(
+
+            listOf(MediaSource.XTREAM_VOD.name, MediaSource.XTREAM_SERIES.name),
+
+        )
+
+
+
+        notifyProgress(onProgress, SyncProgress("Loading movie categories..."))
+
+        val vodCategories = client.fetchVodCategories()
+
+
+
+        notifyProgress(onProgress, SyncProgress("Downloading movies..."))
+
+        var vodSaved = 0
+
+        client.fetchVodStreamsByCategory(vodCategories) { categoryName, items ->
+
+            vodSaved += insertInBatches(items) { count ->
+
+                notifyProgress(
+
+                    onProgress,
+
+                    SyncProgress("Saving movies: $categoryName...", vodSaved + count),
+
+                )
+
+            }
+
+        }
+
+        onInserted(vodSaved)
+
+
+
+        notifyProgress(onProgress, SyncProgress("Loading series categories..."))
+
+        val seriesCategories = client.fetchSeriesCategories()
+
+
+
+        notifyProgress(onProgress, SyncProgress("Downloading series..."))
+
+        var seriesSaved = 0
+
+        client.fetchSeriesByCategory(seriesCategories) { categoryName, items ->
+
+            seriesSaved += insertInBatches(items) { count ->
+
+                notifyProgress(
+
+                    onProgress,
+
+                    SyncProgress("Saving series: $categoryName...", seriesSaved + count),
+
+                )
+
+            }
+
+        }
+
+        onInserted(seriesSaved)
+
+    }
 
 
 

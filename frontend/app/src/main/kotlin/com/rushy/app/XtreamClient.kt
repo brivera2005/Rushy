@@ -188,7 +188,23 @@ interface XtreamApiService {
 
         @Query("action") action: String = "get_series",
 
+        @Query("category_id") categoryId: String? = null,
+
     ): List<XtreamStreamDto>
+
+
+
+    @GET("player_api.php")
+
+    suspend fun getSeriesCategories(
+
+        @Query("username") username: String,
+
+        @Query("password") password: String,
+
+        @Query("action") action: String = "get_series_categories",
+
+    ): List<XtreamCategoryDto>
 
 
 
@@ -368,6 +384,32 @@ class XtreamClient(
 
 
 
+    suspend fun fetchSeriesCategories(): List<ChannelCategory> {
+
+        return runCatching {
+
+            api.getSeriesCategories(username, password).mapNotNull { dto ->
+
+                val id = dto.categoryId ?: return@mapNotNull null
+
+                val name = dto.categoryName?.takeIf { it.isNotBlank() } ?: "Category $id"
+
+                ChannelCategory(id = id, name = name)
+
+            }
+
+        }.getOrElse { e ->
+
+            Log.e(TAG, "fetchSeriesCategories failed", e)
+
+            emptyList()
+
+        }
+
+    }
+
+
+
     suspend fun fetchLiveStreamsByCategory(
 
         categories: List<ChannelCategory>,
@@ -389,6 +431,26 @@ class XtreamClient(
                 total += items.size
 
             }
+
+        }
+
+        if (total == 0 && categories.isNotEmpty()) {
+
+            Log.w(TAG, "Per-category live fetch returned 0; falling back to full download")
+
+            val catMap = categories.associate { it.id to it.name }
+
+            val all = fetchLiveStreams(catMap, categoryId = null)
+
+            all.groupBy { it.categoryId ?: "unknown" }.forEach { (catId, items) ->
+
+                val name = catMap[catId] ?: "Category $catId"
+
+                onCategory(name, items)
+
+            }
+
+            return all.size
 
         }
 
@@ -458,17 +520,43 @@ class XtreamClient(
 
         }
 
+        if (total == 0 && categories.isNotEmpty()) {
+
+            Log.w(TAG, "Per-category VOD fetch returned 0; falling back to full download")
+
+            val catMap = categories.associate { it.id to it.name }
+
+            val all = fetchVodStreams(catMap, categoryId = null)
+
+            all.groupBy { it.categoryId ?: "unknown" }.forEach { (catId, items) ->
+
+                val name = catMap[catId] ?: "Category $catId"
+
+                onCategory(name, items)
+
+            }
+
+            return all.size
+
+        }
+
         return total
 
     }
 
 
 
-    suspend fun fetchSeries(categoryMap: Map<String, String> = emptyMap()): List<MediaItem> {
+    suspend fun fetchSeries(
+
+        categoryMap: Map<String, String> = emptyMap(),
+
+        categoryId: String? = null,
+
+    ): List<MediaItem> {
 
         return runCatching {
 
-            api.getSeries(username, password).mapNotNull { dto ->
+            api.getSeries(username, password, categoryId = categoryId).mapNotNull { dto ->
 
                 dto.toSeriesMediaItem(categoryMap)
 
@@ -476,11 +564,69 @@ class XtreamClient(
 
         }.getOrElse { e ->
 
-            Log.e(TAG, "fetchSeries failed", e)
+            Log.e(TAG, "fetchSeries failed (category=$categoryId)", e)
 
-            throw SyncException("Failed to load series: ${e.message}", e)
+            if (categoryId != null) {
+
+                emptyList()
+
+            } else {
+
+                throw SyncException("Failed to load series: ${e.message}", e)
+
+            }
 
         }
+
+    }
+
+
+
+    suspend fun fetchSeriesByCategory(
+
+        categories: List<ChannelCategory>,
+
+        onCategory: suspend (categoryName: String, items: List<MediaItem>) -> Unit,
+
+    ): Int {
+
+        var total = 0
+
+        for (category in categories) {
+
+            val items = fetchSeries(mapOf(category.id to category.name), category.id)
+
+            if (items.isNotEmpty()) {
+
+                onCategory(category.name, items)
+
+                total += items.size
+
+            }
+
+        }
+
+        if (total == 0 && categories.isNotEmpty()) {
+
+            Log.w(TAG, "Per-category series fetch returned 0; falling back to full download")
+
+            val catMap = categories.associate { it.id to it.name }
+
+            val all = fetchSeries(catMap, categoryId = null)
+
+            all.groupBy { it.categoryId ?: "unknown" }.forEach { (catId, items) ->
+
+                val name = catMap[catId] ?: "Category $catId"
+
+                onCategory(name, items)
+
+            }
+
+            return all.size
+
+        }
+
+        return total
 
     }
 

@@ -63,3 +63,6 @@ credentials.local.properties
 
 *.zip
 .cmdline-tools.zip
+
+# Local IPTV credentials (never commit)
+frontend/app/src/main/kotlin/com/rushy/app/DefaultCredentials.kt

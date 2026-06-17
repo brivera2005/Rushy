@@ -496,7 +496,7 @@ fun ChannelBrowserScreen(
 
         when {
 
-            isLoading -> SkeletonGrid(columns = 5, rows = 3, modifier = Modifier.weight(1f))
+            isLoading -> SkeletonGrid(columns = 7, rows = 3, modifier = Modifier.weight(1f))
 
             channels.isEmpty() -> Box(
 
@@ -514,7 +514,7 @@ fun ChannelBrowserScreen(
 
                 items = channels,
 
-                columns = 5,
+                columns = 7,
 
                 gridState = gridState,
 
@@ -588,9 +588,9 @@ fun VirtualizedMediaGrid(
 
         modifier = modifier.fillMaxSize(),
 
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
 
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
 
     ) {
 
@@ -600,11 +600,9 @@ fun VirtualizedMediaGrid(
 
                 Button(onClick = { onItemClick(item) }) {
 
-                    MediaThumbnail(
+                    MediaThumbnailDense(
 
                         item = item,
-
-                        modifier = Modifier.width(140.dp),
 
                         subtitle = nowPlaying[item.playbackId],
 
@@ -868,13 +866,13 @@ private fun CategoryResultsGrid(
 
     when (val loaded = items) {
 
-        null -> SkeletonGrid(columns = 6, rows = 2)
+        null -> SkeletonGrid(columns = 8, rows = 2)
 
         else -> VirtualizedMediaGrid(
 
             items = loaded,
 
-            columns = 6,
+            columns = 8,
 
             onItemClick = onPlay,
 
@@ -894,7 +892,7 @@ fun PosterCard(item: MediaItem, modifier: Modifier = Modifier) {
 
     Column(
 
-        modifier = modifier.width(150.dp),
+        modifier = modifier.width(118.dp),
 
         verticalArrangement = Arrangement.spacedBy(6.dp),
 
@@ -902,7 +900,7 @@ fun PosterCard(item: MediaItem, modifier: Modifier = Modifier) {
 
         Box {
 
-            MediaThumbnail(item = item, modifier = Modifier.width(150.dp), cardHeight = 210.dp)
+            MediaThumbnailDense(item = item, cardHeight = 168.dp)
 
             item.rating?.let { rating ->
 

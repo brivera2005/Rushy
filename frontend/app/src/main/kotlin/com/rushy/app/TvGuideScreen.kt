@@ -1,224 +1,343 @@
-package com.rushy.app
-
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyColumn
-import androidx.tv.foundation.lazy.list.items
-import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.Text
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import kotlin.math.max
-
-@Composable
-fun TvGuideScreen(
-    repository: LocalMediaRepository,
-    epgRepository: EpgRepository,
-    onPlay: (MediaItem) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var channels by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
-    var epgData by remember { mutableStateOf<Map<String, List<EpgProgram>>>(emptyMap()) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        isLoading = true
-        channels = repository.getLiveChannels(limit = 50)
-        epgData = epgRepository.refreshEpg(channels)
-        isLoading = false
-    }
-
-    val nowSec = System.currentTimeMillis() / 1000
-    val windowStart = nowSec - 1800
-    val windowEnd = nowSec + 4 * 3600
-    val slotMinutes = 30
-    val slotCount = ((windowEnd - windowStart) / (slotMinutes * 60)).toInt()
-    val timeSlots = (0 until slotCount).map { index ->
-        windowStart + index * slotMinutes * 60
-    }
-
-    Column(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "TV Guide",
-                style = MaterialTheme.typography.titleLarge,
-                color = ThemeColors.TextPrimary,
-            )
-            Text(
-                text = if (isLoading) "Loading program data..." else "${channels.size} channels",
-                color = ThemeColors.CobaltAccent,
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            Box(modifier = Modifier.width(200.dp))
-            timeSlots.forEach { epoch ->
-                Box(
-                    modifier = Modifier
-                        .width(120.dp)
-                        .padding(4.dp),
-                ) {
-                    Text(
-                        text = formatTime(epoch),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ThemeColors.CobaltAccent,
-                    )
-                }
-            }
-        }
-
-        if (isLoading) {
-            SkeletonGrid(columns = 1, rows = 6, modifier = Modifier.weight(1f))
-        } else if (channels.isEmpty()) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text("No channels available. Sync your catalog first.", color = ThemeColors.CobaltAccent)
-            }
-        } else {
-            TvLazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                items(channels, key = { it.id }) { channel ->
-                    val programs = epgData[channel.playbackId].orEmpty()
-                        .filter { it.endEpochSec > windowStart && it.startEpochSec < windowEnd }
-
-                    GuideChannelRow(
-                        channel = channel,
-                        programs = programs,
-                        windowStart = windowStart,
-                        windowEnd = windowEnd,
-                        onPlay = onPlay,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun GuideChannelRow(
-    channel: MediaItem,
-    programs: List<EpgProgram>,
-    windowStart: Long,
-    windowEnd: Long,
-    onPlay: (MediaItem) -> Unit,
-) {
-    val totalWidth = (windowEnd - windowStart).toFloat()
-    val accent = LocalRushyTheme.current.currentAccentColor
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .background(ThemeColors.SurfaceDark)
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            modifier = Modifier
-                .width(200.dp)
-                .fillMaxHeight()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            MediaThumbnailCompact(item = channel)
-            Text(
-                text = channel.title,
-                style = MaterialTheme.typography.bodySmall,
-                color = ThemeColors.TextPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .horizontalScroll(rememberScrollState()),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(1200.dp),
-            ) {
-                programs.forEach { program ->
-                    val startOffset = max(0f, (program.startEpochSec - windowStart).toFloat())
-                    val endOffset = minOf(totalWidth, (program.endEpochSec - windowStart).toFloat())
-                    val widthFraction = ((endOffset - startOffset) / totalWidth).coerceAtLeast(0.05f)
-                    val leftFraction = startOffset / totalWidth
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(widthFraction)
-                            .padding(horizontal = 1.dp)
-                            .align(Alignment.CenterStart)
-                            .padding(start = (leftFraction * 1200).dp)
-                            .background(ThemeColors.DarkBackground)
-                            .border(1.dp, accent.copy(alpha = 0.4f))
-                            .padding(horizontal = 6.dp, vertical = 4.dp),
-                    ) {
-                        Column {
-                            Text(
-                                text = program.title,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ThemeColors.TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "${formatTime(program.startEpochSec)} – ${formatTime(program.endEpochSec)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = ThemeColors.CobaltAccent,
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun formatTime(epochSec: Long): String {
-    return SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(epochSec * 1000))
-}
-
+package com.rushy.app
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.tv.foundation.lazy.list.TvLazyColumn
+import androidx.tv.foundation.lazy.list.items
+import androidx.tv.foundation.lazy.list.rememberTvLazyListState
+import androidx.tv.material3.Button
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import kotlinx.coroutines.flow.distinctUntilChanged
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.max
+
+private const val GUIDE_CHANNEL_PAGE = 24
+private const val TIMELINE_WIDTH_DP = 1440
+private const val CHANNEL_COL_WIDTH_DP = 168
+
+@Composable
+fun TvGuideScreen(
+    repository: LocalMediaRepository,
+    epgRepository: EpgRepository,
+    onPlay: (MediaItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var channels by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var epgData by remember { mutableStateOf<Map<String, List<EpgProgram>>>(emptyMap()) }
+    var isLoadingChannels by remember { mutableStateOf(true) }
+    var visibleStart by remember { mutableIntStateOf(0) }
+    val loadState by epgRepository.loadState.collectAsState()
+    val timelineScroll = rememberScrollState()
+    val listState = rememberTvLazyListState()
+    val accent = LocalRushyTheme.current.currentAccentColor
+
+    val nowSec = System.currentTimeMillis() / 1000
+    val windowStart = nowSec - 1800
+    val windowEnd = nowSec + 3 * 3600
+    val slotMinutes = 30
+    val slotCount = ((windowEnd - windowStart) / (slotMinutes * 60)).toInt()
+    val timeSlots = (0 until slotCount).map { index ->
+        windowStart + index * slotMinutes * 60
+    }
+    val totalWidth = (windowEnd - windowStart).toFloat()
+    val nowFraction = ((nowSec - windowStart).toFloat() / totalWidth).coerceIn(0f, 1f)
+
+    LaunchedEffect(Unit) {
+        isLoadingChannels = true
+        channels = repository.getLiveChannels(limit = 200)
+        epgRepository.ensureXmltvParsed()
+        isLoadingChannels = false
+    }
+
+    LaunchedEffect(channels, loadState.isLoading) {
+        if (channels.isEmpty() || loadState.isLoading) return@LaunchedEffect
+        val slice = channels.drop(visibleStart).take(GUIDE_CHANNEL_PAGE)
+        epgData = epgRepository.refreshEpg(slice)
+    }
+
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            listState.layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: 0
+        }.distinctUntilChanged().collect { firstVisible ->
+            visibleStart = (firstVisible / GUIDE_CHANNEL_PAGE) * GUIDE_CHANNEL_PAGE
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(ThemeColors.DarkBackground)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "TV Guide",
+                style = MaterialTheme.typography.headlineSmall,
+                color = ThemeColors.TextPrimary,
+            )
+            Text(
+                text = when {
+                    isLoadingChannels || loadState.isLoading -> loadState.phase.ifBlank { "Loading guide..." }
+                    else -> "${channels.size} channels · ${loadState.programCount} programmes"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = ThemeColors.AccentPrimary,
+            )
+        }
+
+        // Timeline header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(ThemeColors.SurfaceElevated)
+                .padding(vertical = 4.dp),
+        ) {
+            Box(modifier = Modifier.width(CHANNEL_COL_WIDTH_DP.dp))
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(timelineScroll),
+            ) {
+                Box(modifier = Modifier.width(TIMELINE_WIDTH_DP.dp)) {
+                    timeSlots.forEachIndexed { index, epoch ->
+                        val fraction = index.toFloat() / slotCount.coerceAtLeast(1)
+                        Text(
+                            text = formatGuideTime(epoch),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (epoch <= nowSec && (timeSlots.getOrNull(index + 1) ?: Long.MAX_VALUE) > nowSec) {
+                                ThemeColors.AccentPrimary
+                            } else {
+                                ThemeColors.TextSecondary
+                            },
+                            modifier = Modifier
+                                .offset(x = (fraction * TIMELINE_WIDTH_DP).dp)
+                                .padding(start = 4.dp),
+                        )
+                    }
+                    // Now line
+                    Box(
+                        modifier = Modifier
+                            .offset(x = (nowFraction * TIMELINE_WIDTH_DP).dp)
+                            .width(2.dp)
+                            .height(28.dp)
+                            .background(ThemeColors.LiveIndicator),
+                    )
+                }
+            }
+        }
+
+        when {
+            isLoadingChannels || (loadState.isLoading && epgData.isEmpty()) -> {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(12) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(ThemeColors.SurfaceDark),
+                        )
+                    }
+                }
+            }
+            channels.isEmpty() -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No channels available. Sync your catalog first.",
+                        color = ThemeColors.TextSecondary,
+                    )
+                }
+            }
+            else -> {
+                TvLazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    items(channels, key = { it.id }) { channel ->
+                        val programs = epgData[channel.playbackId].orEmpty()
+                            .filter { it.endEpochSec > windowStart && it.startEpochSec < windowEnd }
+
+                        GuideChannelRow(
+                            channel = channel,
+                            programs = programs,
+                            windowStart = windowStart,
+                            windowEnd = windowEnd,
+                            nowSec = nowSec,
+                            timelineScroll = timelineScroll,
+                            onPlay = onPlay,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GuideChannelRow(
+    channel: MediaItem,
+    programs: List<EpgProgram>,
+    windowStart: Long,
+    windowEnd: Long,
+    nowSec: Long,
+    timelineScroll: androidx.compose.foundation.ScrollState,
+    onPlay: (MediaItem) -> Unit,
+) {
+    val accent = LocalRushyTheme.current.currentAccentColor
+    val totalWidth = (windowEnd - windowStart).toFloat()
+    val rowScroll = rememberScrollState()
+
+    LaunchedEffect(timelineScroll.value) {
+        if (rowScroll.value != timelineScroll.value) {
+            rowScroll.scrollTo(timelineScroll.value)
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(ThemeColors.SurfaceDark),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Button(
+            onClick = { onPlay(channel) },
+            modifier = Modifier
+                .width(CHANNEL_COL_WIDTH_DP.dp)
+                .fillMaxHeight(),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                MediaThumbnailCompact(item = channel, size = 36.dp)
+                Text(
+                    text = channel.title,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ThemeColors.TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .horizontalScroll(rowScroll),
+        ) {
+            Box(modifier = Modifier.width(TIMELINE_WIDTH_DP.dp).fillMaxHeight()) {
+                if (programs.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(ThemeColors.SurfaceElevated)
+                            .padding(horizontal = 8.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Text(
+                            text = if (channel.epgChannelId.isNullOrBlank()) "No EPG data" else "No programmes in window",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ThemeColors.TextMuted,
+                            maxLines = 1,
+                        )
+                    }
+                } else {
+                    programs.forEach { program ->
+                        val startOffset = max(0f, (program.startEpochSec - windowStart).toFloat())
+                        val endOffset = minOf(totalWidth, (program.endEpochSec - windowStart).toFloat())
+                        val widthFraction = ((endOffset - startOffset) / totalWidth).coerceAtLeast(0.04f)
+                        val leftFraction = startOffset / totalWidth
+                        val isLive = program.startEpochSec <= nowSec && program.endEpochSec > nowSec
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(widthFraction)
+                                .offset(x = (leftFraction * TIMELINE_WIDTH_DP).dp)
+                                .padding(horizontal = 1.dp, vertical = 4.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(
+                                    if (isLive) accent.copy(alpha = 0.25f) else ThemeColors.SurfaceElevated,
+                                )
+                                .then(
+                                    if (isLive) Modifier.border(1.dp, accent, RoundedCornerShape(4.dp))
+                                    else Modifier,
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Column {
+                                Text(
+                                    text = program.title,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (isLive) ThemeColors.TextPrimary else ThemeColors.TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (isLive) {
+                                    val remaining = ((program.endEpochSec - nowSec) / 60).coerceAtLeast(0)
+                                    Text(
+                                        text = "${remaining}m left",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = ThemeColors.AccentPrimary,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatGuideTime(epochSec: Long): String {
+    return SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(epochSec * 1000))
+}

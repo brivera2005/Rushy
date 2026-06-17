@@ -19,6 +19,7 @@ import androidx.room.RoomDatabase
         Index("source"),
         Index("category_id"),
         Index(value = ["source", "category_id"]),
+        Index("epg_channel_id"),
     ],
 )
 data class MediaItemEntity(
@@ -29,10 +30,29 @@ data class MediaItemEntity(
     val logoUrl: String?,
     @ColumnInfo(name = "category_id") val categoryId: String?,
     @ColumnInfo(name = "category_name") val categoryName: String?,
+    @ColumnInfo(name = "epg_channel_id") val epgChannelId: String? = null,
     val plot: String? = null,
     val rating: String? = null,
     @ColumnInfo(name = "is_favorite") val isFavorite: Boolean = false,
     @ColumnInfo(name = "is_hidden") val isHidden: Boolean = false,
+)
+
+@Entity(
+    tableName = "epg_programs",
+    indices = [
+        Index("channel_id"),
+        Index(value = ["channel_id", "start_epoch_sec"]),
+        Index("start_epoch_sec"),
+        Index("end_epoch_sec"),
+    ],
+)
+data class EpgProgramEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "channel_id") val channelId: String,
+    val title: String,
+    val description: String? = null,
+    @ColumnInfo(name = "start_epoch_sec") val startEpochSec: Long,
+    @ColumnInfo(name = "end_epoch_sec") val endEpochSec: Long,
 )
 
 data class CategoryRow(
@@ -114,11 +134,64 @@ interface MediaDao {
 
     @Query("SELECT * FROM media_items WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): MediaItemEntity?
+
+    @Query(
+        """
+        SELECT DISTINCT epg_channel_id FROM media_items
+        WHERE source = :source AND epg_channel_id IS NOT NULL AND epg_channel_id != '' AND is_hidden = 0
+        """,
+    )
+    suspend fun getEpgChannelIds(source: String): List<String>
 }
 
-@Database(entities = [MediaItemEntity::class], version = 1, exportSchema = false)
+@Dao
+interface EpgDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(programs: List<EpgProgramEntity>)
+
+    @Query("DELETE FROM epg_programs")
+    suspend fun clearAll()
+
+    @Query("SELECT COUNT(*) FROM epg_programs")
+    suspend fun countPrograms(): Int
+
+    @Query(
+        """
+        SELECT * FROM epg_programs
+        WHERE channel_id = :channelId
+        AND end_epoch_sec > :windowStart AND start_epoch_sec < :windowEnd
+        ORDER BY start_epoch_sec
+        """,
+    )
+    suspend fun getProgramsForChannel(
+        channelId: String,
+        windowStart: Long,
+        windowEnd: Long,
+    ): List<EpgProgramEntity>
+
+    @Query(
+        """
+        SELECT * FROM epg_programs
+        WHERE channel_id IN (:channelIds)
+        AND end_epoch_sec > :windowStart AND start_epoch_sec < :windowEnd
+        ORDER BY channel_id, start_epoch_sec
+        """,
+    )
+    suspend fun getProgramsForChannels(
+        channelIds: List<String>,
+        windowStart: Long,
+        windowEnd: Long,
+    ): List<EpgProgramEntity>
+}
+
+@Database(
+    entities = [MediaItemEntity::class, EpgProgramEntity::class],
+    version = 2,
+    exportSchema = false,
+)
 abstract class MediaDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
+    abstract fun epgDao(): EpgDao
 
     companion object {
         @Volatile
@@ -145,6 +218,7 @@ fun MediaItemEntity.toMediaItem(): MediaItem = MediaItem(
     logoUrl = logoUrl,
     categoryId = categoryId,
     categoryName = categoryName,
+    epgChannelId = epgChannelId,
     plot = plot,
     rating = rating,
     isFavorite = isFavorite,
@@ -159,6 +233,7 @@ fun MediaItem.toEntity(): MediaItemEntity = MediaItemEntity(
     logoUrl = logoUrl,
     categoryId = categoryId,
     categoryName = categoryName,
+    epgChannelId = epgChannelId,
     plot = plot,
     rating = rating,
     isFavorite = isFavorite,

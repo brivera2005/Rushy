@@ -33,7 +33,7 @@ class RushyApplication : Application(), ImageLoaderFactory {
                     .maxSizePercent(0.02)
                     .build()
             }
-            .crossfade(true)
+            .crossfade(150)
             .build()
     }
 

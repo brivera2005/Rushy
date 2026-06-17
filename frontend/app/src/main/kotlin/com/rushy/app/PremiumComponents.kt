@@ -1,6 +1,7 @@
 package com.rushy.app
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -20,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyRow
@@ -50,12 +50,12 @@ fun SyncErrorView(
         Text(
             text = "Sync failed",
             style = MaterialTheme.typography.headlineSmall,
-            color = ThemeColors.CrimsonAccent,
+            color = ThemeColors.Error,
         )
         Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
-            color = ThemeColors.TextPrimary,
+            color = ThemeColors.TextSecondary,
         )
         Button(onClick = onRetry) {
             Text("Retry")
@@ -70,7 +70,7 @@ fun SyncProgressView(
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = progress.phase,
@@ -81,7 +81,7 @@ fun SyncProgressView(
             Text(
                 text = "%,d items".format(progress.count),
                 style = MaterialTheme.typography.bodyLarge,
-                color = LocalRushyTheme.current.currentAccentColor,
+                color = ThemeColors.AccentPrimary,
             )
         }
         SkeletonBar(modifier = Modifier.fillMaxWidth(0.6f))
@@ -92,13 +92,13 @@ fun SyncProgressView(
 fun SkeletonBar(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .height(6.dp)
-            .clip(RoundedCornerShape(3.dp))
+            .height(4.dp)
+            .clip(RoundedCornerShape(2.dp))
             .background(
                 Brush.horizontalGradient(
                     listOf(
                         ThemeColors.SurfaceDark,
-                        ThemeColors.CobaltAccent.copy(alpha = 0.35f),
+                        ThemeColors.AccentPrimary.copy(alpha = 0.35f),
                         ThemeColors.SurfaceDark,
                     ),
                 ),
@@ -117,7 +117,7 @@ fun CategoryPillRow(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         categories.forEach { category ->
             val selected = category.id == selectedId
@@ -125,16 +125,17 @@ fun CategoryPillRow(
             Button(
                 onClick = { onSelect(category.id) },
                 modifier = if (selected) {
-                    Modifier.border(2.dp, accent, RoundedCornerShape(20.dp))
+                    Modifier.border(2.dp, accent, RoundedCornerShape(16.dp))
                 } else {
                     Modifier
                 },
             ) {
                 Text(
                     text = category.name,
-                    color = if (selected) accent else ThemeColors.TextPrimary,
+                    color = if (selected) accent else ThemeColors.TextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
         }
@@ -153,14 +154,14 @@ fun HeroChannelRow(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleLarge,
             color = ThemeColors.TextPrimary,
         )
-        TvLazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        TvLazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(items, key = { it.id }) { item ->
                 HeroChannelCard(
                     item = item,
@@ -182,27 +183,31 @@ private fun HeroChannelCard(
     Button(onClick = onClick) {
         Column(
             modifier = Modifier
-                .width(200.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    Brush.verticalGradient(
-                        listOf(ThemeColors.SurfaceDark, ThemeColors.DarkBackground),
-                    ),
-                )
-                .border(1.dp, accent.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .width(160.dp)
+                .clip(RoundedCornerShape(ThemeColors.CornerRadius))
+                .background(ThemeColors.SurfaceElevated)
+                .border(1.dp, accent.copy(alpha = 0.2f), RoundedCornerShape(ThemeColors.CornerRadius))
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             MediaThumbnail(
                 item = item,
                 modifier = Modifier.fillMaxWidth(),
-                cardHeight = 100.dp,
+                cardHeight = 80.dp,
+                showTitle = false,
+            )
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.labelSmall,
+                color = ThemeColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             nowPlaying?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = ThemeColors.EmeraldAccent,
+                    color = ThemeColors.AccentPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -212,22 +217,48 @@ private fun HeroChannelCard(
 }
 
 @Composable
+fun DashboardStatCard(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(ThemeColors.CornerRadius))
+            .background(ThemeColors.SurfaceElevated)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineMedium,
+            color = ThemeColors.AccentPrimary,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = ThemeColors.TextSecondary,
+        )
+    }
+}
+
+@Composable
 fun SkeletonGrid(
-    columns: Int = 5,
+    columns: Int = 7,
     rows: Int = 2,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         repeat(rows) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 repeat(columns) {
                     Box(
                         modifier = Modifier
-                            .width(140.dp)
-                            .height(120.dp)
+                            .width(108.dp)
+                            .height(140.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(ThemeColors.SurfaceDark),
                     )
@@ -243,7 +274,11 @@ fun FocusScaleBox(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, label = "focusScale")
+    val scale by animateFloatAsState(
+        targetValue = if (focused) 1.05f else 1f,
+        animationSpec = tween(200),
+        label = "focusScale",
+    )
     Box(modifier = modifier.scale(scale)) {
         content()
     }

@@ -42,6 +42,8 @@ data class XtreamStreamDto(
 
     @SerializedName("rating_5based") val rating5Based: Double? = null,
 
+    @SerializedName("epg_channel_id") val epgChannelId: String? = null,
+
 )
 
 
@@ -679,6 +681,8 @@ class XtreamClient(
             categoryId = catId,
 
             categoryName = catId?.let { categoryMap[it] },
+
+            epgChannelId = epgChannelId?.takeIf { it.isNotBlank() },
 
         )
 

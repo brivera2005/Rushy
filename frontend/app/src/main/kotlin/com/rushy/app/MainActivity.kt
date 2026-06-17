@@ -68,6 +68,8 @@ import androidx.compose.ui.Modifier
 
 import androidx.compose.ui.platform.LocalContext
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 
 import androidx.tv.foundation.lazy.list.TvLazyRow
@@ -489,6 +491,17 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                     AppDiagnostics.clearError(context)
 
+                }
+
+                // Background EPG load after catalog sync
+                if (result.liveCount > 0) {
+                    syncScope.launch {
+                        try {
+                            epgRepository.ensureXmltvParsed()
+                        } catch (e: Exception) {
+                            Log.w("RushyApp", "Background EPG sync failed", e)
+                        }
+                    }
                 }
 
                 if (liveOnly && result.liveCount > 0) {
@@ -961,6 +974,8 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                         repository = repo,
 
+                        epgRepository = epgRepository,
+
                         searchQuery = searchQuery,
 
                         searchResults = searchResults,
@@ -1060,123 +1075,138 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 @Composable
-
 private fun HomeScreen(
-
     summary: CatalogSummary,
-
     repository: LocalMediaRepository,
-
+    epgRepository: EpgRepository,
     searchQuery: String,
-
     searchResults: SearchResult?,
-
     onPlay: (MediaItem) -> Unit,
-
 ) {
-
     var favorites by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
-
     var featured by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
-
     var previewMovies by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
-
-
+    var nowPlaying by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     LaunchedEffect(Unit) {
-
         favorites = repository.getFavorites(16)
-
-        featured = repository.getFeaturedLive(12)
-
-        previewMovies = repository.getItemsBySource(MediaSource.XTREAM_VOD, limit = 16)
-
+        featured = repository.getFeaturedLive(14)
+        previewMovies = repository.getItemsBySource(MediaSource.XTREAM_VOD, limit = 20)
+        epgRepository.ensureXmltvParsed()
     }
 
-
+    LaunchedEffect(featured) {
+        if (featured.isEmpty()) return@LaunchedEffect
+        val epg = mutableMapOf<String, String>()
+        val now = System.currentTimeMillis() / 1000
+        featured.take(8).forEach { channel ->
+            epgRepository.getOrFetchEpg(channel).firstOrNull {
+                it.startEpochSec <= now && it.endEpochSec > now
+            }?.let { epg[channel.playbackId] = it.title }
+        }
+        nowPlaying = epg
+    }
 
     Column(
-
         modifier = Modifier
-
             .fillMaxSize()
-
             .verticalScroll(rememberScrollState()),
-
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-
         if (searchQuery.isNotBlank()) {
-
             Text(
-
                 text = "Results for \"$searchQuery\"",
-
-                color = LocalRushyTheme.current.currentAccentColor,
-
+                color = ThemeColors.AccentPrimary,
+                style = MaterialTheme.typography.titleMedium,
             )
-
             searchResults?.exactMatches?.takeIf { it.isNotEmpty() }?.let { matches ->
-
                 ThumbnailMediaRow(title = "Exact Matches", items = matches, onItemClick = onPlay)
-
             }
-
             searchResults?.nearMatches?.takeIf { it.isNotEmpty() }?.let { matches ->
-
                 ThumbnailMediaRow(title = "Near Matches", items = matches, onItemClick = onPlay)
-
             }
-
         }
 
+        // Dashboard stats
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            DashboardStatCard(
+                label = "Live Channels",
+                value = "%,d".format(summary.liveCount),
+                modifier = Modifier.weight(1f),
+            )
+            DashboardStatCard(
+                label = "Movies & Series",
+                value = "%,d".format(summary.movieCount),
+                modifier = Modifier.weight(1f),
+            )
+            DashboardStatCard(
+                label = "Favorites",
+                value = "%,d".format(summary.favoriteCount),
+                modifier = Modifier.weight(1f),
+            )
+        }
 
+        // Hero — now playing
+        if (featured.isNotEmpty()) {
+            val hero = featured.first()
+            val heroNow = nowPlaying[hero.playbackId]
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(ThemeColors.CornerRadius))
+                    .background(ThemeColors.SurfaceElevated)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Now on Live TV",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ThemeColors.TextSecondary,
+                )
+                Text(
+                    text = hero.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = ThemeColors.TextPrimary,
+                )
+                heroNow?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ThemeColors.AccentPrimary,
+                    )
+                }
+                Button(onClick = { onPlay(hero) }) {
+                    Text("Watch Now")
+                }
+            }
+        }
 
         if (favorites.isNotEmpty()) {
-
-            HeroChannelRow(title = "Your Favorites", items = favorites, onPlay = onPlay)
-
+            HeroChannelRow(title = "Your Favorites", items = favorites, onPlay = onPlay, nowPlaying = nowPlaying)
         }
 
-
-
         HeroChannelRow(
-
-            title = "Live TV (${summary.liveCount})",
-
+            title = "Live TV",
             items = featured,
-
             onPlay = onPlay,
-
+            nowPlaying = nowPlaying,
         )
-
-
 
         ThumbnailMediaRow(
-
-            title = "Movies & Series (${summary.movieCount})",
-
+            title = "Movies & Series",
             items = previewMovies,
-
             onItemClick = onPlay,
-
         )
-
-
 
         Text(
-
-            text = "Browse ${summary.liveCategories.size - 1} channel categories and ${summary.movieCount} titles",
-
-            color = ThemeColors.CobaltAccent,
-
-            style = MaterialTheme.typography.bodyMedium,
-
+            text = "${summary.liveCategories.size - 1} categories · ${summary.movieCount} titles",
+            color = ThemeColors.TextMuted,
+            style = MaterialTheme.typography.labelMedium,
         )
-
     }
-
 }
 
 
@@ -1217,13 +1247,13 @@ private fun ThumbnailMediaRow(
 
 
 
-    TvLazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    TvLazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 
         items(items, key = { it.id }) { item ->
 
             Button(onClick = { onItemClick(item) }) {
 
-                MediaThumbnail(item = item, modifier = Modifier.width(140.dp))
+                MediaThumbnailDense(item = item, cardHeight = 168.dp)
 
             }
 

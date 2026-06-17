@@ -5,11 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.File
 
 class PlaybackRouter(
     private val context: Context,
@@ -138,121 +133,6 @@ class PlaybackRouter(
                 CredentialStore.getInstance(context),
                 PlayerSettings.getInstance(context),
             )
-        }
-    }
-}
-
-class EpgRepository private constructor(
-    private val context: Context,
-    private val credentials: CredentialStore,
-) {
-    private val gson = Gson()
-    private val cacheFile = File(context.filesDir, "epg_cache.json")
-    private var cachedPrograms: Map<String, List<EpgProgram>> = emptyMap()
-    private var cacheTimestamp: Long = 0L
-
-    init {
-        loadCache()
-    }
-
-    fun getProgramsForChannel(channelId: String): List<EpgProgram> =
-        cachedPrograms[channelId].orEmpty()
-
-    suspend fun getOrFetchEpg(channel: MediaItem): List<EpgProgram> = withContext(Dispatchers.IO) {
-        cachedPrograms[channel.playbackId]?.let { return@withContext it }
-        if (credentials.isDemoMode || !credentials.hasXtreamCredentials()) {
-            return@withContext demoEpgForChannel(channel)
-        }
-        val client = XtreamClient(
-            credentials.xtreamPortal,
-            credentials.xtreamUsername,
-            credentials.xtreamPassword,
-        )
-        val programs = client.fetchEpgForChannel(channel)
-        if (programs.isNotEmpty()) {
-            cachedPrograms = cachedPrograms + (channel.playbackId to programs)
-            saveCache()
-        }
-        programs
-    }
-
-    suspend fun refreshEpg(channels: List<MediaItem>): Map<String, List<EpgProgram>> =
-        withContext(Dispatchers.IO) {
-            if (credentials.isDemoMode || !credentials.hasXtreamCredentials()) {
-                return@withContext demoEpg(channels)
-            }
-
-            val result = mutableMapOf<String, List<EpgProgram>>()
-            channels.take(40).forEach { channel ->
-                result[channel.playbackId] = getOrFetchEpg(channel)
-            }
-            result
-        }
-
-    private fun demoEpgForChannel(channel: MediaItem): List<EpgProgram> {
-        val now = System.currentTimeMillis() / 1000
-        return (0 until 3).map { index ->
-            val start = now + index * 3600L
-            EpgProgram(
-                id = "${channel.id}_$index",
-                channelId = channel.playbackId,
-                title = "Program ${index + 1}",
-                description = "Demo guide for ${channel.title}",
-                startEpochSec = start,
-                endEpochSec = start + 3600,
-            )
-        }
-    }
-
-    private fun demoEpg(channels: List<MediaItem>): Map<String, List<EpgProgram>> {
-        val now = System.currentTimeMillis() / 1000
-        return channels.associate { channel ->
-            val programs = (0 until 4).map { index ->
-                val start = now + index * 3600L
-                EpgProgram(
-                    id = "${channel.id}_$index",
-                    channelId = channel.playbackId,
-                    title = "Program ${index + 1}",
-                    description = "Demo guide entry for ${channel.title}",
-                    startEpochSec = start,
-                    endEpochSec = start + 3600,
-                )
-            }
-            channel.playbackId to programs
-        }
-    }
-
-    private fun loadCache() {
-        if (!cacheFile.exists()) return
-        runCatching {
-            val wrapper = gson.fromJson(cacheFile.readText(), EpgCacheWrapper::class.java)
-            cachedPrograms = wrapper.programs
-            cacheTimestamp = wrapper.timestamp
-        }
-    }
-
-    private fun saveCache() {
-        cacheFile.writeText(
-            gson.toJson(EpgCacheWrapper(cachedPrograms, cacheTimestamp)),
-        )
-    }
-
-    private data class EpgCacheWrapper(
-        val programs: Map<String, List<EpgProgram>>,
-        val timestamp: Long,
-    )
-
-    companion object {
-        private const val CACHE_TTL_MS = 60 * 60 * 1000L
-
-        @Volatile
-        private var instance: EpgRepository? = null
-
-        fun getInstance(context: Context): EpgRepository {
-            return instance ?: synchronized(this) {
-                instance ?: EpgRepository(context.applicationContext, CredentialStore.getInstance(context))
-                    .also { instance = it }
-            }
         }
     }
 }

@@ -230,9 +230,16 @@ class XtreamStreamUrlResolver @Inject constructor(
                     )
                 )
             }
-            ProviderType.M3U,
-            ProviderType.JELLYFIN,
-            ProviderType.PLEX -> null
+            ProviderType.JELLYFIN -> null
+            ProviderType.PLEX -> url.takeIf { it.isNotBlank() }?.let { passthroughUrl ->
+                resolvedProvider.applyPlaybackRequestProfile(
+                    ResolvedStreamUrl(
+                        url = passthroughUrl,
+                        expirationTime = extractStreamExpirationTime(passthroughUrl),
+                        containerExtension = fallbackContainerExtension
+                    )
+                )
+            }
         }
     }
 

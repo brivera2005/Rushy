@@ -101,6 +101,7 @@ internal suspend fun resolvePlayerPlaybackStreamInfo(
 
             ContentType.MOVIE -> {
                 movieRepository.getMovie(internalContentId)?.let { movie ->
+                    val effectiveProviderId = movie.providerId.takeIf { it > 0L } ?: providerId
                     fallbackStreamId = movie.streamId.takeIf { it > 0L }
                     fallbackContainerExtension = movie.containerExtension
                     val streamInfoResult = movieRepository.getStreamInfo(movie)
@@ -156,9 +157,20 @@ internal suspend fun resolvePlayerPlaybackStreamInfo(
     }
 
     try {
+        val movieForFallback = if (contentType == ContentType.MOVIE && internalContentId > 0L) {
+            movieRepository.getMovie(internalContentId)
+        } else {
+            null
+        }
+        val effectiveProviderId = when (contentType) {
+            ContentType.MOVIE -> movieForFallback?.providerId?.takeIf { it > 0L } ?: providerId
+            ContentType.SERIES,
+            ContentType.SERIES_EPISODE -> currentEpisode?.providerId?.takeIf { it > 0L } ?: providerId
+            else -> providerId
+        }
         xtreamStreamUrlResolver.resolveWithMetadata(
             url = logicalUrl,
-            fallbackProviderId = providerId.takeIf { it > 0 },
+            fallbackProviderId = effectiveProviderId.takeIf { it > 0 },
             fallbackStreamId = fallbackStreamId,
             fallbackContentType = contentType,
             fallbackContainerExtension = fallbackContainerExtension

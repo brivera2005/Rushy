@@ -26,7 +26,8 @@ data class Channel(
     val qualityOptions: List<ChannelQualityOption> = emptyList(),
     val alternativeStreams: List<String> = emptyList(),
     val variants: List<LiveChannelVariant> = emptyList(),
-    val streamId: Long = 0L
+    val streamId: Long = 0L,
+    val catalogSource: CatalogSource? = null
 ) {
     init {
         require(number >= 0) { "number must be non-negative" }

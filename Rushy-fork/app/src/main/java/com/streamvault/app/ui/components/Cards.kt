@@ -78,9 +78,29 @@ import com.streamvault.app.ui.theme.TextTertiary
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Movie
 import com.streamvault.domain.model.Series
+import com.streamvault.domain.model.showsPlexBadge
 import com.streamvault.app.ui.design.FocusSpec
 import com.streamvault.app.ui.interaction.mouseClickable
 import com.streamvault.app.ui.interaction.rememberTvInteractionSounds
+
+private val PlexBadgeColor = Color(0xFFE5A00D)
+
+@Composable
+private fun BoxScope.PlexCatalogBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .align(Alignment.BottomEnd)
+            .padding(6.dp)
+            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = "P",
+            style = MaterialTheme.typography.labelSmall,
+            color = PlexBadgeColor
+        )
+    }
+}
 
 private object ChannelProgressTicker {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -443,6 +463,10 @@ fun MovieCard(
                     )
                 }
             }
+
+            if (movie.showsPlexBadge()) {
+                PlexCatalogBadge()
+            }
         }
     }
 }
@@ -552,6 +576,10 @@ fun SeriesCard(
                         modifier = Modifier.size(12.dp)
                     )
                 }
+            }
+
+            if (series.showsPlexBadge()) {
+                PlexCatalogBadge()
             }
         }
     }

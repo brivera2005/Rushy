@@ -1,11 +1,13 @@
 package com.streamvault.domain.usecase
 
 import com.streamvault.domain.manager.ProviderSyncStateReader
+import com.streamvault.domain.model.CatalogSource
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Movie
 import com.streamvault.domain.model.ProviderType
 import com.streamvault.domain.model.Series
 import com.streamvault.domain.model.SyncState
+import com.streamvault.domain.model.toCatalogSource
 import com.streamvault.domain.repository.ProviderRepository
 import com.streamvault.domain.repository.SearchRepository
 import com.streamvault.domain.repository.SearchRepositoryResult
@@ -140,8 +142,8 @@ class SearchContent @Inject constructor(
                 )
                 degraded = degraded || primaryResult.second
 
-                var combined = primaryResult.first
-                if (fallbackProviderId != null && isLowConfidence(combined, scope)) {
+                var combined = tagCatalogSource(primaryResult.first, CatalogSource.XTREAM)
+                if (fallbackProviderId != null && shouldQueryFallbackProvider(combined, scope)) {
                     val fallbackResult = executeSearch(
                         providerId = fallbackProviderId,
                         query = searchQuery,
@@ -149,7 +151,12 @@ class SearchContent @Inject constructor(
                         maxResultsPerSection = maxResultsPerSection
                     )
                     degraded = degraded || fallbackResult.second
-                    combined = mergeXtreamFirst(primaryResult.first, fallbackResult.first, maxResultsPerSection)
+                    combined = mergeXtreamFirst(
+                        combined,
+                        tagCatalogSource(fallbackResult.first, CatalogSource.PLEX),
+                        scope,
+                        maxResultsPerSection
+                    )
                 }
 
                 merged = mergeSearchResults(merged, combined, maxResultsPerSection)
@@ -195,27 +202,54 @@ class SearchContent @Inject constructor(
         }
     }
 
-    private fun isLowConfidence(result: SearchRepositoryResult, scope: SearchContentScope): Boolean {
-        val count = when (scope) {
-            SearchContentScope.ALL ->
-                result.channels.size + result.movies.size + result.series.size
-            SearchContentScope.LIVE -> result.channels.size
-            SearchContentScope.MOVIES -> result.movies.size
-            SearchContentScope.SERIES -> result.series.size
-        }
-        return count < LOW_CONFIDENCE_RESULT_THRESHOLD
+    private fun shouldQueryFallbackProvider(
+        result: SearchRepositoryResult,
+        scope: SearchContentScope
+    ): Boolean = when (scope) {
+        SearchContentScope.ALL ->
+            result.movies.size < LOW_CONFIDENCE_RESULT_THRESHOLD ||
+                result.series.size < LOW_CONFIDENCE_RESULT_THRESHOLD
+        SearchContentScope.LIVE -> result.channels.size < LOW_CONFIDENCE_RESULT_THRESHOLD
+        SearchContentScope.MOVIES -> result.movies.size < LOW_CONFIDENCE_RESULT_THRESHOLD
+        SearchContentScope.SERIES -> result.series.size < LOW_CONFIDENCE_RESULT_THRESHOLD
     }
+
+    private fun isLowConfidence(result: SearchRepositoryResult, scope: SearchContentScope): Boolean =
+        shouldQueryFallbackProvider(result, scope)
 
     private fun mergeXtreamFirst(
         primary: SearchRepositoryResult,
         fallback: SearchRepositoryResult,
+        scope: SearchContentScope,
         maxResultsPerSection: Int
-    ): SearchRepositoryResult =
-        SearchRepositoryResult(
-            channels = (primary.channels + fallback.channels).distinctBy { it.id }.take(maxResultsPerSection),
-            movies = (primary.movies + fallback.movies).distinctBy { it.id }.take(maxResultsPerSection),
-            series = (primary.series + fallback.series).distinctBy { it.id }.take(maxResultsPerSection)
+    ): SearchRepositoryResult {
+        val mergedMovies = when (scope) {
+            SearchContentScope.LIVE -> primary.movies
+            else -> (primary.movies + fallback.movies).distinctBy { it.id }.take(maxResultsPerSection)
+        }
+        val mergedSeries = when (scope) {
+            SearchContentScope.LIVE, SearchContentScope.MOVIES -> primary.series
+            else -> (primary.series + fallback.series).distinctBy { it.id }.take(maxResultsPerSection)
+        }
+        val mergedChannels = when (scope) {
+            SearchContentScope.MOVIES, SearchContentScope.SERIES -> primary.channels
+            else -> (primary.channels + fallback.channels).distinctBy { it.id }.take(maxResultsPerSection)
+        }
+        return SearchRepositoryResult(
+            channels = mergedChannels,
+            movies = mergedMovies,
+            series = mergedSeries
         )
+    }
+
+    private fun tagCatalogSource(
+        result: SearchRepositoryResult,
+        source: CatalogSource
+    ): SearchRepositoryResult = SearchRepositoryResult(
+        channels = result.channels.map { it.copy(catalogSource = source) },
+        movies = result.movies.map { it.copy(catalogSource = source) },
+        series = result.series.map { it.copy(catalogSource = source) }
+    )
 
     private fun mergeSearchResults(
         current: SearchRepositoryResult,

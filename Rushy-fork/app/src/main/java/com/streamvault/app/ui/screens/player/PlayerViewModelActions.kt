@@ -207,7 +207,7 @@ internal fun StreamInfo.toCastRequest(
     }
     return CastMediaRequest(
         url = resolvedUrl,
-        title = title.ifBlank { this.title ?: "StreamVault" },
+        title = title.ifBlank { this.title ?: "Rushy" },
         subtitle = subtitle,
         artworkUrl = artworkUrl,
         mimeType = mimeType,

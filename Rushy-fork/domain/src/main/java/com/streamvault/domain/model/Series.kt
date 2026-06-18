@@ -28,7 +28,8 @@ data class Series(
     val selectedVariantId: Long? = null,
     val variants: List<VodSeriesVariant> = emptyList(),
     val duplicateConfidence: VodDuplicateConfidence = VodDuplicateConfidence.NONE,
-    val variantLabel: String? = null
+    val variantLabel: String? = null,
+    val catalogSource: CatalogSource? = null
 ) {
     init {
         require(rating in 0f..10f) { "rating must be between 0 and 10" }

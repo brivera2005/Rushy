@@ -8,7 +8,7 @@ class UpdatePreferences(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     var autoUpdateEnabled: Boolean
-        get() = prefs.getBoolean(KEY_AUTO_UPDATE, false)
+        get() = prefs.getBoolean(KEY_AUTO_UPDATE, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_UPDATE, value).apply()
 
     var checkOnStartup: Boolean

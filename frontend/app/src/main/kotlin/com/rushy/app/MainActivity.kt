@@ -311,6 +311,10 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
     var showUpdateDialog by remember { mutableStateOf(false) }
 
+    var isForceUpdating by remember { mutableStateOf(false) }
+
+    var forceUpdateStatus by remember { mutableStateOf<String?>(null) }
+
     var isCheckingUpdate by remember { mutableStateOf(false) }
 
     var isDownloadingUpdate by remember { mutableStateOf(false) }
@@ -351,7 +355,11 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
         if (activity != null && !updateManager.canInstallPackages()) {
 
+            forceUpdateStatus = "Install permission required — open Settings to allow."
+
             updateManager.requestInstallPermission(activity)
+
+            isForceUpdating = false
 
             return
 
@@ -360,6 +368,8 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
         isDownloadingUpdate = true
 
         downloadProgress = 0
+
+        forceUpdateStatus = null
 
         when (val download = updateManager.downloadApk(updateInfo) { progress ->
 
@@ -379,6 +389,8 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 downloadProgress = -1
 
+                isForceUpdating = false
+
             }
 
             is DownloadResult.Error -> {
@@ -386,6 +398,10 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
                 isDownloadingUpdate = false
 
                 downloadProgress = -1
+
+                isForceUpdating = false
+
+                forceUpdateStatus = download.message
 
                 Toast.makeText(context, download.message, Toast.LENGTH_LONG).show()
 
@@ -397,7 +413,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-    fun handleUpdateCheckResult(result: UpdateCheckResult, autoInstall: Boolean) {
+    fun handleUpdateCheckResult(result: UpdateCheckResult, forceInstall: Boolean) {
 
         when (result) {
 
@@ -405,7 +421,11 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 pendingUpdate = result.info
 
-                if (autoInstall && updatePrefs.autoUpdateEnabled) {
+                if (forceInstall) {
+
+                    showUpdateDialog = false
+
+                    isForceUpdating = true
 
                     scope.launch { performUpdate(result.info) }
 
@@ -423,11 +443,15 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 showUpdateDialog = false
 
+                isForceUpdating = false
+
             }
 
             is UpdateCheckResult.Error -> {
 
-                if (!autoInstall) {
+                isForceUpdating = false
+
+                if (!forceInstall) {
 
                     Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
 
@@ -441,7 +465,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-    fun checkForUpdates(autoInstall: Boolean) {
+    fun checkForUpdates(forceInstall: Boolean = true) {
 
         if (isCheckingUpdate) return
 
@@ -453,7 +477,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
             isCheckingUpdate = false
 
-            handleUpdateCheckResult(result, autoInstall = autoInstall)
+            handleUpdateCheckResult(result, forceInstall = forceInstall)
 
         }
 
@@ -573,7 +597,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
                 }
 
                 if (showRefreshIndicator) {
-                    checkForUpdates(autoInstall = updatePrefs.autoUpdateEnabled)
+                    checkForUpdates(forceInstall = true)
                 }
 
             }
@@ -660,7 +684,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 delay(1200)
 
-                checkForUpdates(autoInstall = true)
+                checkForUpdates(forceInstall = true)
 
             }
 
@@ -746,9 +770,48 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
+    if (isForceUpdating && pendingUpdate != null) {
+
+        ForceUpdateScreen(
+
+            updateInfo = pendingUpdate!!,
+
+            downloadProgress = downloadProgress,
+
+            statusMessage = forceUpdateStatus,
+
+        )
+
+        return
+
+    }
+
+
+
+    if (showUpdateDialog && pendingUpdate != null) {
+
+        UpdateAvailableDialog(
+
+            updateInfo = pendingUpdate!!,
+
+            isDownloading = isDownloadingUpdate,
+
+            downloadProgress = downloadProgress,
+
+            onUpdateNow = { scope.launch { performUpdate(pendingUpdate!!) } },
+
+            onLater = { showUpdateDialog = false },
+
+        )
+
+        return
+
+    }
+
+
+
     Box(modifier = Modifier.fillMaxSize().background(ThemeColors.DarkBackground)) {
 
-        if (!showUpdateDialog) {
         Row(modifier = Modifier.fillMaxSize()) {
 
             PlexSidebar(
@@ -811,7 +874,13 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                         Button(
 
-                            onClick = { showUpdateDialog = true },
+                            onClick = {
+
+                                isForceUpdating = true
+
+                                scope.launch { performUpdate(update) }
+
+                            },
 
                             modifier = Modifier.height(48.dp),
 
@@ -1043,11 +1112,13 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                         onUpdateChecked = { result ->
 
-                            handleUpdateCheckResult(result, autoInstall = false)
+                            handleUpdateCheckResult(result, forceInstall = false)
 
                         },
 
                         onStartUpdate = { update ->
+
+                            isForceUpdating = true
 
                             scope.launch { performUpdate(update) }
 
@@ -1061,31 +1132,11 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
             }
 
-            }
-
-        }
-
-        }
-
-        if (showUpdateDialog && pendingUpdate != null) {
-
-            UpdateAvailableDialog(
-
-                updateInfo = pendingUpdate!!,
-
-                isDownloading = isDownloadingUpdate,
-
-                downloadProgress = downloadProgress,
-
-                onUpdateNow = { scope.launch { performUpdate(pendingUpdate!!) } },
-
-                onLater = { showUpdateDialog = false },
-
-            )
-
         }
 
     }
+
+}
 
 }
 

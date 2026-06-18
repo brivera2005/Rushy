@@ -57,6 +57,8 @@ import androidx.compose.ui.Alignment
 
 import androidx.compose.ui.Modifier
 
+import androidx.compose.ui.focus.onFocusChanged
+
 import androidx.compose.ui.graphics.SolidColor
 
 import androidx.compose.ui.text.style.TextOverflow
@@ -510,15 +512,13 @@ fun VirtualizedMediaGrid(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
 
                 Button(onClick = { onItemClick(item) }) {
-
-                    MediaThumbnailDense(
-
+                    var focused by remember { mutableStateOf(false) }
+                    LiveChannelTile(
                         item = item,
-
                         subtitle = nowPlaying[item.playbackId],
-
+                        isFocused = focused,
+                        modifier = Modifier.onFocusChanged { focused = it.isFocused },
                     )
-
                 }
 
                 if (onToggleFavorite != null) {

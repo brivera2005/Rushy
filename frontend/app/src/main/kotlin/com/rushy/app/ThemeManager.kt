@@ -8,38 +8,47 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/** Plex-inspired TV palette — dark charcoal base, amber accent. */
+/** High-contrast TV palette — black background, white text, clear focus. */
 object ThemeColors {
-    val DarkBackground = Color(0xFF1A1A2E)
-    val SidebarBackground = Color(0xFF12121F)
-    val SurfaceDark = Color(0xFF282A2D)
-    val SurfaceElevated = Color(0xFF32353A)
-    val SurfaceGlass = Color(0xCC282A2D)
+    val DarkBackground = Color(0xFF000000)
+    val SidebarBackground = Color(0xFF0A0A0A)
+    val SurfaceDark = Color(0xFF141414)
+    val SurfaceElevated = Color(0xFF1E1E1E)
+    val SurfaceGlass = Color(0xE6141414)
 
-    val TextPrimary = Color(0xFFEAEAEA)
-    val TextSecondary = Color(0xFFADADAD)
-    val TextMuted = Color(0xFF6E6E6E)
+    val TextPrimary = Color(0xFFFFFFFF)
+    val TextSecondary = Color(0xFFB3B3B3)
+    val TextMuted = Color(0xFF707070)
 
-    val AccentPrimary = Color(0xFFE5A00D)
-    val AccentSecondary = Color(0xFFCC7B19)
-    val AccentTeal = Color(0xFF00D4AA)
-    val AccentGlow = Color(0x66E5A00D)
+    val AccentPrimary = Color(0xFFFFFFFF)
+    val AccentSecondary = Color(0xFFE0E0E0)
+    val AccentTeal = Color(0xFFFFFFFF)
+    val AccentGlow = Color(0x33FFFFFF)
 
-    val Success = Color(0xFF34D399)
-    val Warning = Color(0xFFFBBF24)
-    val Error = Color(0xFFEF4444)
-    val LiveIndicator = Color(0xFFE53935)
+    val FocusBorder = Color(0xFFFFFFFF)
+    val FocusBackground = Color(0xFFFFFFFF)
+    val FocusText = Color(0xFF000000)
+
+    val Success = Color(0xFF4ADE80)
+    val Warning = Color(0xFFFACC15)
+    val Error = Color(0xFFF87171)
+    val LiveIndicator = Color(0xFFEF4444)
 
     val CrimsonAccent = Error
-    val CobaltAccent = AccentTeal
+    val CobaltAccent = TextSecondary
     val EmeraldAccent = Success
 
-    val CornerRadius = 6.dp
-    val CardRadius = 8.dp
-    val FocusRingWidth = 2.dp
-    val GridSpacing = 8.dp
+    val CornerRadius = 4.dp
+    val CardRadius = 4.dp
+    val FocusRingWidth = 3.dp
+    val GridSpacing = 6.dp
     val MinFocusTarget = 48.dp
     val SidebarWidth = 200.dp
+
+    val LiveLogoWidth = 160.dp
+    val LiveLogoHeight = 90.dp
+    val PosterWidth = 120.dp
+    val PosterHeight = 180.dp
 }
 
 @Stable

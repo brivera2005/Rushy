@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -71,19 +73,26 @@ fun TrendingActionRow(
         )
         TvLazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             items(items, key = { it.id }) { item ->
-                TrendingActionCard(
-                    item = item,
-                    resolver = resolver,
-                    repository = repository,
-                    credentials = credentials,
-                    onPlay = onPlay,
-                    onRequest = { tmdbItem ->
-                        scope.launch {
-                            val result = resolver.requestOnPlex(tmdbItem)
-                            Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
-                        }
-                    },
-                )
+                var focused by remember(item.id) { mutableStateOf(false) }
+                Button(
+                    onClick = { /* selection handled by card buttons */ },
+                    modifier = Modifier.onFocusChanged { focused = it.isFocused },
+                ) {
+                    TrendingActionCard(
+                        item = item,
+                        resolver = resolver,
+                        repository = repository,
+                        credentials = credentials,
+                        onPlay = onPlay,
+                        onRequest = { tmdbItem ->
+                            scope.launch {
+                                val result = resolver.requestOnPlex(tmdbItem)
+                                Toast.makeText(context, result.message, Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        isFocused = focused,
+                    )
+                }
             }
         }
     }
@@ -97,15 +106,10 @@ fun TrendingActionCard(
     credentials: CredentialStore,
     onPlay: (MediaItem) -> Unit,
     onRequest: (TmdbMediaItem) -> Unit,
+    isFocused: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var actionState by remember(item.id) { mutableStateOf(TrendingActionState(isResolving = true)) }
-    var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isFocused) 1.05f else 1f,
-        animationSpec = tween(180),
-        label = "trendingFocus",
-    )
     val shape = RoundedCornerShape(ThemeColors.CornerRadius)
 
     LaunchedEffect(item.id, credentials.plexToken) {
@@ -115,30 +119,27 @@ fun TrendingActionCard(
 
     Column(
         modifier = modifier
-            .width(140.dp)
-            .scale(scale)
+            .width(ThemeColors.PosterWidth)
             .clip(shape)
-            .then(
-                if (isFocused) Modifier.border(2.dp, ThemeColors.AccentTeal, shape)
-                else Modifier,
-            )
-            .background(ThemeColors.SurfaceElevated)
-            .padding(6.dp),
+            .tvFocusHighlight(shape = shape, focused = isFocused)
+            .background(ThemeColors.SurfaceDark)
+            .padding(4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(4.dp))
-                .background(ThemeColors.SurfaceDark),
+                .height(ThemeColors.PosterHeight)
+                .clip(shape)
+                .background(ThemeColors.SurfaceElevated),
         ) {
             val poster = item.posterUrl
             if (!poster.isNullOrBlank()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(poster)
-                        .crossfade(150)
+                        .crossfade(120)
+                        .size(500)
                         .build(),
                     contentDescription = item.displayTitle,
                     contentScale = ContentScale.Crop,
@@ -148,7 +149,7 @@ fun TrendingActionCard(
                 Text(
                     text = item.displayTitle.take(2).uppercase(),
                     modifier = Modifier.align(Alignment.Center),
-                    color = ThemeColors.AccentPrimary,
+                    color = ThemeColors.TextSecondary,
                 )
             }
             if (item.voteAverage > 0) {

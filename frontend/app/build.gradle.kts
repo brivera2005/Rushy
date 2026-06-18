@@ -68,8 +68,8 @@ android {
         applicationId = "com.rushy.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 11
-        versionName = "1.3.1"
+        versionCode = 12
+        versionName = "1.4.0"
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
         buildConfigField("String", "TRAKT_CLIENT_ID", "\"$traktClientId\"")
         buildConfigField("String", "TRAKT_CLIENT_SECRET", "\"$traktClientSecret\"")

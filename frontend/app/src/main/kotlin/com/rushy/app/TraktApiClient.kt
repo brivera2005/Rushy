@@ -22,7 +22,7 @@ class TraktApiClient(
         .build()
 
     suspend fun fetchTrendingMovies(limit: Int = 20): List<TmdbMediaItem> = withContext(Dispatchers.IO) {
-        fetchTrendingList("/movies/trending?limit=$limit&extended=full") { body ->
+        fetchTrendingList("/movies/trending?limit=$limit&extended=images,full") { body ->
             val type = object : TypeToken<List<TraktTrendingMovieEntry>>() {}.type
             val entries: List<TraktTrendingMovieEntry> = gson.fromJson(body, type)
             entries.mapNotNull { entry -> entry.movie?.toMediaItem("movie") }
@@ -30,7 +30,7 @@ class TraktApiClient(
     }
 
     suspend fun fetchTrendingShows(limit: Int = 20): List<TmdbMediaItem> = withContext(Dispatchers.IO) {
-        fetchTrendingList("/shows/trending?limit=$limit&extended=full") { body ->
+        fetchTrendingList("/shows/trending?limit=$limit&extended=images,full") { body ->
             val type = object : TypeToken<List<TraktTrendingShowEntry>>() {}.type
             val entries: List<TraktTrendingShowEntry> = gson.fromJson(body, type)
             entries.mapNotNull { entry -> entry.show?.toMediaItem("tv") }
@@ -38,7 +38,7 @@ class TraktApiClient(
     }
 
     suspend fun fetchPopularMovies(limit: Int = 20): List<TmdbMediaItem> = withContext(Dispatchers.IO) {
-        fetchTrendingList("/movies/popular?limit=$limit&extended=full") { body ->
+        fetchTrendingList("/movies/popular?limit=$limit&extended=images,full") { body ->
             val type = object : TypeToken<List<TraktMovie>>() {}.type
             val movies: List<TraktMovie> = gson.fromJson(body, type)
             movies.map { it.toMediaItem("movie") }
@@ -46,7 +46,7 @@ class TraktApiClient(
     }
 
     suspend fun fetchPopularShows(limit: Int = 20): List<TmdbMediaItem> = withContext(Dispatchers.IO) {
-        fetchTrendingList("/shows/popular?limit=$limit&extended=full") { body ->
+        fetchTrendingList("/shows/popular?limit=$limit&extended=images,full") { body ->
             val type = object : TypeToken<List<TraktShow>>() {}.type
             val shows: List<TraktShow> = gson.fromJson(body, type)
             shows.map { it.toMediaItem("tv") }
@@ -175,7 +175,7 @@ class TraktApiClient(
     private fun TraktMovie.toMediaItem(mediaType: String): TmdbMediaItem = TmdbMediaItem(
         id = ids.tmdb ?: ids.trakt,
         title = title,
-        posterPath = images?.poster?.firstOrNull(),
+        posterPath = resolvePosterPath(images, ids),
         backdropPath = images?.fanart?.firstOrNull(),
         voteAverage = rating,
         overview = overview,
@@ -185,12 +185,20 @@ class TraktApiClient(
     private fun TraktShow.toMediaItem(mediaType: String): TmdbMediaItem = TmdbMediaItem(
         id = ids.tmdb ?: ids.trakt,
         name = title,
-        posterPath = images?.poster?.firstOrNull(),
+        posterPath = resolvePosterPath(images, ids),
         backdropPath = images?.fanart?.firstOrNull(),
         voteAverage = rating,
         overview = overview,
         mediaType = mediaType,
     )
+
+    private fun resolvePosterPath(images: TraktImages?, ids: TraktIds): String? {
+        images?.poster?.firstOrNull { it.startsWith("http") }?.let { return it }
+        images?.fanart?.firstOrNull { it.startsWith("http") }?.let { return it }
+        val tmdb = ids.tmdb ?: return null
+        if (tmdb > 0) return "tmdb:$tmdb"
+        return null
+    }
 
     companion object {
         private const val TAG = "TraktApiClient"

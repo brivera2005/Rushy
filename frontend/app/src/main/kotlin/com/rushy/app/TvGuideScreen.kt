@@ -52,6 +52,8 @@ fun TvGuideScreen(
     epgRepository: EpgRepository,
     onPlay: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
+    channelsOverride: List<MediaItem>? = null,
+    showHeader: Boolean = true,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -75,12 +77,23 @@ fun TvGuideScreen(
     val totalWidth = (windowEnd - windowStart).toFloat()
     val nowFraction = ((nowSec - windowStart).toFloat() / totalWidth).coerceIn(0f, 1f)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(channelsOverride) {
+        if (channelsOverride != null) {
+            channels = channelsOverride
+            isLoadingChannels = false
+            return@LaunchedEffect
+        }
         isLoadingChannels = true
         channels = repository.getLiveChannels(limit = 300)
         EpgSyncService.start(context, force = false)
         epgRepository.ensureXmltvParsed()
         isLoadingChannels = false
+    }
+
+    LaunchedEffect(channelsOverride) {
+        if (channelsOverride == null) return@LaunchedEffect
+        EpgSyncService.start(context, force = false)
+        epgRepository.ensureXmltvParsed()
     }
 
     LaunchedEffect(channels, loadState.isLoading, loadState.programCount) {
@@ -102,38 +115,40 @@ fun TvGuideScreen(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "TV Guide",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = ThemeColors.TextPrimary,
-                )
-                val statusText = when {
-                    loadState.error != null -> "EPG error: ${loadState.error}"
-                    isLoadingChannels || loadState.isLoading -> loadState.phase.ifBlank { "Loading guide..." }
-                    loadState.programCount > 0 -> "EPG: ${loadState.programCount} programmes · ${loadState.channelCount} channels mapped"
-                    else -> "${channels.size} channels · waiting for EPG data"
-                }
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (loadState.error != null) ThemeColors.Error else ThemeColors.AccentPrimary,
-                )
-            }
-            Button(
-                onClick = {
-                    scope.launch {
-                        EpgSyncService.start(context, force = true)
-                        epgRepository.ensureXmltvParsed(force = true)
-                    }
-                },
+        if (showHeader) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("↻ Refresh Guide")
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "TV Guide",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = ThemeColors.TextPrimary,
+                    )
+                    val statusText = when {
+                        loadState.error != null -> "EPG error: ${loadState.error}"
+                        isLoadingChannels || loadState.isLoading -> loadState.phase.ifBlank { "Loading guide..." }
+                        loadState.programCount > 0 -> "EPG: ${loadState.programCount} programmes · ${loadState.channelCount} channels mapped"
+                        else -> "${channels.size} channels · waiting for EPG data"
+                    }
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (loadState.error != null) ThemeColors.Error else ThemeColors.TextSecondary,
+                    )
+                }
+                Button(
+                    onClick = {
+                        scope.launch {
+                            EpgSyncService.start(context, force = true)
+                            epgRepository.ensureXmltvParsed(force = true)
+                        }
+                    },
+                ) {
+                    Text("↻ Refresh Guide")
+                }
             }
         }
 
@@ -320,10 +335,10 @@ private fun GuideChannelRow(
                                 .padding(horizontal = 1.dp, vertical = 4.dp)
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(
-                                    if (isLive) accent.copy(alpha = 0.25f) else ThemeColors.SurfaceElevated,
+                                    if (isLive) ThemeColors.SurfaceElevated else ThemeColors.SurfaceDark,
                                 )
                                 .then(
-                                    if (isLive) Modifier.border(1.dp, accent, RoundedCornerShape(4.dp))
+                                    if (isLive) Modifier.border(2.dp, ThemeColors.FocusBorder, RoundedCornerShape(4.dp))
                                     else Modifier,
                                 )
                                 .padding(horizontal = 6.dp, vertical = 2.dp),

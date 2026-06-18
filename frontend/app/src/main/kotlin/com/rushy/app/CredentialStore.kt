@@ -93,6 +93,14 @@ class CredentialStore(context: Context) {
             DefaultCredentials.USERNAME,
             DefaultCredentials.PASSWORD,
         )
+        if (DefaultCredentials.PLEX_SERVER_URL.isNotBlank() &&
+            DefaultCredentials.PLEX_TOKEN.isNotBlank()
+        ) {
+            savePlex(DefaultCredentials.PLEX_SERVER_URL, DefaultCredentials.PLEX_TOKEN)
+        }
+        if (DefaultCredentials.BACKEND_URL.isNotBlank()) {
+            backendUrl = DefaultCredentials.BACKEND_URL
+        }
         completeSetup()
     }
 

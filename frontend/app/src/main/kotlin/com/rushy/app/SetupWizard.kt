@@ -52,9 +52,21 @@ fun SetupWizardView(onSetupComplete: () -> Unit) {
             credentials.xtreamPassword.ifBlank { DefaultCredentials.PASSWORD },
         )
     }
-    var plexServerUrl by remember { mutableStateOf(credentials.plexServerUrl) }
-    var plexToken by remember { mutableStateOf(credentials.plexToken) }
-    var backendUrl by remember { mutableStateOf(credentials.backendUrl) }
+    var plexServerUrl by remember {
+        mutableStateOf(
+            credentials.plexServerUrl.ifBlank { DefaultCredentials.PLEX_SERVER_URL },
+        )
+    }
+    var plexToken by remember {
+        mutableStateOf(
+            credentials.plexToken.ifBlank { DefaultCredentials.PLEX_TOKEN },
+        )
+    }
+    var backendUrl by remember {
+        mutableStateOf(
+            credentials.backendUrl.ifBlank { DefaultCredentials.BACKEND_URL },
+        )
+    }
     var showAdvanced by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
 

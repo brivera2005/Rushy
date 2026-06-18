@@ -19,9 +19,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -130,27 +134,34 @@ fun CategoryPillRow(
     ) {
         categories.forEach { category ->
             val selected = category.id == selectedId
-            val accent = LocalRushyTheme.current.currentAccentColor
+            var focused by remember(category.id) { mutableStateOf(false) }
+            val shape = RoundedCornerShape(ThemeColors.CornerRadius)
             Button(
                 onClick = { onSelect(category.id) },
-                modifier = if (selected) {
-                    Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .border(2.dp, accent, RoundedCornerShape(4.dp))
-                } else {
-                    Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(ThemeColors.SurfaceDark)
-                },
+                modifier = Modifier.onFocusChanged { focused = it.isFocused },
             ) {
-                Text(
-                    text = category.name,
-                    color = if (selected) accent else ThemeColors.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                )
+                Box(
+                    modifier = Modifier
+                        .clip(shape)
+                        .then(
+                            when {
+                                selected -> Modifier.background(ThemeColors.FocusBackground)
+                                focused -> Modifier
+                                    .background(ThemeColors.SurfaceElevated)
+                                    .tvFocusHighlight(shape = shape, focused = true)
+                                else -> Modifier.background(ThemeColors.SurfaceDark)
+                            },
+                        )
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        text = category.name,
+                        color = if (selected) ThemeColors.FocusText else ThemeColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
         }
     }
@@ -257,26 +268,30 @@ fun TmdbDiscoveryRow(
 fun TmdbPosterCard(
     item: TmdbMediaItem,
     modifier: Modifier = Modifier,
-    width: Dp = 120.dp,
+    width: Dp = ThemeColors.PosterWidth,
+    isFocused: Boolean = false,
 ) {
     val shape = RoundedCornerShape(ThemeColors.CornerRadius)
     Column(
-        modifier = modifier.width(width),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier
+            .width(width)
+            .tvFocusHighlight(shape = shape, focused = isFocused),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(2f / 3f)
+                .width(width)
+                .height(ThemeColors.PosterHeight)
                 .clip(shape)
-                .background(ThemeColors.SurfaceElevated),
+                .background(ThemeColors.SurfaceDark),
         ) {
             val url = item.posterUrl
             if (!url.isNullOrBlank()) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(url)
-                        .crossfade(150)
+                        .crossfade(120)
+                        .size(500)
                         .build(),
                     contentDescription = item.displayTitle,
                     contentScale = ContentScale.Crop,
@@ -286,7 +301,7 @@ fun TmdbPosterCard(
                 Text(
                     text = item.displayTitle.take(2).uppercase(),
                     modifier = Modifier.align(Alignment.Center),
-                    color = ThemeColors.AccentPrimary,
+                    color = ThemeColors.TextSecondary,
                 )
             }
             if (item.voteAverage > 0) {
@@ -348,62 +363,14 @@ fun LiveTvCard(
     item: MediaItem,
     nowPlaying: String? = null,
     modifier: Modifier = Modifier,
+    isFocused: Boolean = false,
 ) {
-    val shape = RoundedCornerShape(ThemeColors.CornerRadius)
-    Column(
-        modifier = modifier
-            .width(176.dp)
-            .clip(shape)
-            .background(ThemeColors.SurfaceElevated)
-            .padding(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(4.dp))
-                .background(ThemeColors.SurfaceDark),
-            contentAlignment = Alignment.Center,
-        ) {
-            val logo = item.logoUrl?.takeIf { it.startsWith("http") }
-            if (!logo.isNullOrBlank()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(logo)
-                        .crossfade(150)
-                        .size(200)
-                        .build(),
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp),
-                )
-            } else {
-                Text(
-                    text = item.title.take(2).uppercase(),
-                    color = ThemeColors.AccentPrimary,
-                )
-            }
-        }
-        Text(
-            text = item.title,
-            style = MaterialTheme.typography.labelSmall,
-            color = ThemeColors.TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        nowPlaying?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.labelSmall,
-                color = ThemeColors.AccentTeal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
+    LiveChannelTile(
+        item = item,
+        subtitle = nowPlaying,
+        isFocused = isFocused,
+        modifier = modifier,
+    )
 }
 
 @Composable

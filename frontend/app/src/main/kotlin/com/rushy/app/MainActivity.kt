@@ -572,6 +572,10 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 }
 
+                if (showRefreshIndicator) {
+                    checkForUpdates(autoInstall = updatePrefs.autoUpdateEnabled)
+                }
+
             }
 
         }
@@ -986,7 +990,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                     )
 
-                    AppScreen.LIVE_TV -> ChannelBrowserScreen(
+                    AppScreen.LIVE_TV -> LiveTvGuideScreen(
 
                         summary = catalog,
 

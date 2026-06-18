@@ -20,11 +20,19 @@ data class TmdbMediaItem(
     val displayTitle: String get() = title ?: name ?: "Unknown"
     val posterUrl: String?
         get() = posterPath?.let { path ->
-            if (path.startsWith("http")) path else "https://image.tmdb.org/t/p/w342$path"
+            when {
+                path.startsWith("http") -> path
+                path.startsWith("tmdb:") -> TmdbImageResolver.posterUrlForId(path.removePrefix("tmdb:"), isMovie)
+                else -> "https://image.tmdb.org/t/p/w342$path"
+            }
         }
     val backdropUrl: String?
         get() = backdropPath?.let { path ->
-            if (path.startsWith("http")) path else "https://image.tmdb.org/t/p/w1280$path"
+            when {
+                path.startsWith("http") -> path
+                path.startsWith("tmdb:") -> TmdbImageResolver.backdropUrlForId(path.removePrefix("tmdb:"), isMovie)
+                else -> "https://image.tmdb.org/t/p/w780$path"
+            }
         }
     val isMovie: Boolean get() = mediaType == "movie" || title != null
 }

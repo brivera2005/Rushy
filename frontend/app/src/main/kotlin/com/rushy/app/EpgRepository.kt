@@ -70,90 +70,118 @@ class EpgRepository private constructor(
             if (credentials.isDemoMode || !credentials.hasXtreamCredentials()) {
                 return@withContext demoEpg(channels)
             }
-            ensureXmltvParsed()
-            val now = System.currentTimeMillis() / 1000
-            val windowStart = now - 1800
-            val windowEnd = now + 4 * 3600
-            val epgIds = channels.mapNotNull { channel ->
-                channel.epgChannelId?.takeIf { it.isNotBlank() }
-                    ?: channel.playbackId.takeIf { it.isNotBlank() }
-            }.distinct()
-            val byEpgId = getProgramsForChannels(epgIds, windowStart, windowEnd)
-            channels.associate { channel ->
-                val key = channel.epgChannelId?.takeIf { it.isNotBlank() } ?: channel.playbackId
-                val programs = key?.let { byEpgId[it] }.orEmpty()
-                channel.playbackId to programs
+            try {
+                ensureXmltvParsed()
+                val now = System.currentTimeMillis() / 1000
+                val windowStart = now - 1800
+                val windowEnd = now + 4 * 3600
+                val epgIds = channels.mapNotNull { channel ->
+                    channel.epgChannelId?.takeIf { it.isNotBlank() }
+                        ?: channel.playbackId.takeIf { it.isNotBlank() }
+                }.distinct()
+                if (epgIds.isEmpty()) return@withContext emptyMap()
+                val byEpgId = getProgramsForChannels(epgIds, windowStart, windowEnd)
+                channels.associate { channel ->
+                    val key = channel.epgChannelId?.takeIf { it.isNotBlank() } ?: channel.playbackId
+                    val programs = key.let { byEpgId[it] }.orEmpty()
+                    channel.playbackId to programs
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "refreshEpg failed", e)
+                emptyMap()
             }
         }
 
     suspend fun ensureXmltvParsed(force: Boolean = false) {
         if (credentials.isDemoMode || !credentials.hasXtreamCredentials()) return
         syncMutex.withLock {
-            val meta = loadMeta()
-            val portalKey = portalFingerprint()
-            val stale = meta == null ||
-                meta.portalKey != portalKey ||
-                System.currentTimeMillis() - meta.timestamp > CACHE_TTL_MS ||
-                force
-            if (!stale && dao.countPrograms() > 0) {
-                val mapped = mediaDao.getEpgChannelIds(MediaSource.XTREAM_LIVE.name).size
-                _loadState.value = EpgLoadState("Guide ready", false, dao.countPrograms(), mapped)
-                return
-            }
+            try {
+                val meta = loadMeta()
+                val portalKey = portalFingerprint()
+                val stale = meta == null ||
+                    meta.portalKey != portalKey ||
+                    System.currentTimeMillis() - meta.timestamp > CACHE_TTL_MS ||
+                    force
+                if (!stale && dao.countPrograms() > 0) {
+                    val mapped = mediaDao.getEpgChannelIds(MediaSource.XTREAM_LIVE.name).size
+                    _loadState.value = EpgLoadState("Guide ready", false, dao.countPrograms(), mapped)
+                    return
+                }
 
-            _loadState.value = EpgLoadState("Loading guide...", true, 0, 0)
+                _loadState.value = EpgLoadState("Loading guide...", true, 0, 0)
 
-            if (!xmltvFile.exists() || stale) {
-                val ok = XmltvParser.downloadXmltv(
-                    credentials.xtreamPortal,
-                    credentials.xtreamUsername,
-                    credentials.xtreamPassword,
-                    xmltvFile,
-                ) { phase -> _loadState.value = EpgLoadState(phase, true, 0, 0) }
-                if (!ok && !xmltvFile.exists()) {
+                if (!xmltvFile.exists() || stale) {
+                    val ok = XmltvParser.downloadXmltv(
+                        credentials.xtreamPortal,
+                        credentials.xtreamUsername,
+                        credentials.xtreamPassword,
+                        xmltvFile,
+                    ) { phase -> _loadState.value = EpgLoadState(phase, true, 0, 0) }
+                    if (!ok && !xmltvFile.exists()) {
+                        _loadState.value = EpgLoadState(
+                            "Guide download failed",
+                            false,
+                            0,
+                            0,
+                            "Could not download xmltv.php — check network or portal URL",
+                        )
+                        return
+                    }
+                    saveMeta(XmltvMeta(portalKey, System.currentTimeMillis()))
+                }
+
+                _loadState.value = EpgLoadState("Parsing guide...", true, 0, 0)
+                val channelIds = buildEpgChannelIdSet()
+                if (channelIds.isEmpty()) {
                     _loadState.value = EpgLoadState(
-                        "Guide download failed",
+                        "No EPG channel mapping",
                         false,
                         0,
                         0,
-                        "Could not download xmltv.php — check network or portal URL",
+                        "Channels lack epg_channel_id — re-sync catalog",
                     )
                     return
                 }
-                saveMeta(XmltvMeta(portalKey, System.currentTimeMillis()))
-            }
 
-            _loadState.value = EpgLoadState("Parsing guide...", true, 0, 0)
-            val channelIds = buildEpgChannelIdSet()
-            if (channelIds.isEmpty()) {
+                val now = System.currentTimeMillis() / 1000
+                val windowStart = now - 6 * 3600
+                val windowEnd = now + 24 * 3600
+
+                val programmes = XmltvParser.parseProgrammes(
+                    xmltvFile,
+                    channelIds,
+                    windowStart,
+                    windowEnd,
+                ) { count ->
+                    _loadState.value = EpgLoadState("Parsing guide... ($count)", true, count, channelIds.size)
+                }
+
+                if (programmes.isEmpty() && xmltvFile.length() > 0) {
+                    _loadState.value = EpgLoadState(
+                        "Guide parse failed",
+                        false,
+                        0,
+                        channelIds.size,
+                        "Could not read TV guide data — tap Refresh Guide or Sync",
+                    )
+                    return
+                }
+
+                dao.clearAll()
+                programmes.chunked(500).forEach { batch -> dao.insertAll(batch) }
+                val total = dao.countPrograms()
+                _loadState.value = EpgLoadState("Guide ready", false, total, channelIds.size)
+                Log.i(TAG, "EPG loaded: $total programmes for ${channelIds.size} channels")
+            } catch (e: Exception) {
+                Log.e(TAG, "EPG sync failed", e)
                 _loadState.value = EpgLoadState(
-                    "No EPG channel mapping",
+                    "Guide sync failed",
                     false,
+                    dao.countPrograms(),
                     0,
-                    0,
-                    "Channels lack epg_channel_id — re-sync catalog",
+                    e.message ?: "Unexpected error loading TV guide",
                 )
-                return
             }
-
-            val now = System.currentTimeMillis() / 1000
-            val windowStart = now - 6 * 3600
-            val windowEnd = now + 24 * 3600
-
-            val programmes = XmltvParser.parseProgrammes(
-                xmltvFile,
-                channelIds,
-                windowStart,
-                windowEnd,
-            ) { count ->
-                _loadState.value = EpgLoadState("Parsing guide... ($count)", true, count, channelIds.size)
-            }
-
-            dao.clearAll()
-            programmes.chunked(500).forEach { batch -> dao.insertAll(batch) }
-            val total = dao.countPrograms()
-            _loadState.value = EpgLoadState("Guide ready", false, total, channelIds.size)
-            Log.i(TAG, "EPG loaded: $total programmes for ${channelIds.size} channels")
         }
     }
 
@@ -192,7 +220,9 @@ class EpgRepository private constructor(
 
     private suspend fun buildEpgChannelIdSet(): Set<String> {
         val ids = mediaDao.getEpgChannelIds(MediaSource.XTREAM_LIVE.name).toMutableSet()
-        ids.addAll(mediaDao.getLivePlaybackIdsWithoutEpg(MediaSource.XTREAM_LIVE.name))
+        if (ids.isEmpty()) {
+            ids.addAll(mediaDao.getLivePlaybackIdsWithoutEpg(MediaSource.XTREAM_LIVE.name))
+        }
         return ids
     }
 

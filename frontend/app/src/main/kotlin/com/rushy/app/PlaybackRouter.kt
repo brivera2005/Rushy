@@ -10,8 +10,12 @@ class PlaybackRouter(
     private val context: Context,
     private val credentials: CredentialStore,
     private val playerSettings: PlayerSettings,
+    private val recentChannels: RecentChannelsStore,
 ) {
     fun play(item: MediaItem) {
+        if (item.source == MediaSource.XTREAM_LIVE || item.source == MediaSource.DEMO) {
+            recentChannels.record(item.id)
+        }
         val contentType = playerSettings.contentTypeFor(item)
         val player = playerSettings.getPlayer(contentType)
         when (player) {
@@ -24,16 +28,54 @@ class PlaybackRouter(
         }
     }
 
-    private fun launchBuiltin(item: MediaItem) {
-        val streamUrl = resolveStreamUrl(item)
+    fun playCatchup(item: MediaItem, program: EpgProgram) {
+        if (!item.tvArchive) {
+            showError("Catch-up is not available for ${item.title}.")
+            return
+        }
+        val now = System.currentTimeMillis() / 1000
+        if (program.endEpochSec > now) {
+            play(item)
+            return
+        }
+        if (item.tvArchiveDurationHours != null) {
+            val archiveStart = now - item.tvArchiveDurationHours * 3600L
+            if (program.startEpochSec < archiveStart) {
+                showError("This program is outside the ${item.tvArchiveDurationHours}h archive window.")
+                return
+            }
+        }
+        recentChannels.record(item.id)
+        val streamUrl = resolveCatchupUrl(item, program)
+        if (streamUrl.isNullOrBlank()) {
+            showError("Could not build catch-up URL for ${program.title}.")
+            return
+        }
+        val contentType = playerSettings.contentTypeFor(item)
+        val player = playerSettings.getPlayer(contentType)
+        when (player) {
+            PlayerType.BUILTIN, PlayerType.VLC, PlayerType.MPV, PlayerType.EXTERNAL ->
+                launchBuiltin(item, streamUrlOverride = streamUrl, isLive = false, title = program.title)
+            PlayerType.TIVIMATE, PlayerType.PLEX ->
+                launchBuiltin(item, streamUrlOverride = streamUrl, isLive = false, title = program.title)
+        }
+    }
+
+    private fun launchBuiltin(
+        item: MediaItem,
+        streamUrlOverride: String? = null,
+        isLive: Boolean? = null,
+        title: String? = null,
+    ) {
+        val streamUrl = streamUrlOverride ?: resolveStreamUrl(item)
         if (streamUrl.isNullOrBlank()) {
             showError("No stream URL available for ${item.title}.")
             return
         }
         val intent = Intent(context, PlayerActivity::class.java).apply {
             putExtra(PlayerActivity.EXTRA_STREAM_URL, streamUrl)
-            putExtra(PlayerActivity.EXTRA_TITLE, item.title)
-            putExtra(PlayerActivity.EXTRA_IS_LIVE, item.source == MediaSource.XTREAM_LIVE)
+            putExtra(PlayerActivity.EXTRA_TITLE, title ?: item.title)
+            putExtra(PlayerActivity.EXTRA_IS_LIVE, isLive ?: (item.source == MediaSource.XTREAM_LIVE))
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         context.startActivity(intent)
@@ -109,6 +151,17 @@ class PlaybackRouter(
         )
     }
 
+    private fun resolveCatchupUrl(item: MediaItem, program: EpgProgram): String? {
+        if (!credentials.hasXtreamCredentials()) return null
+        return StreamUrlBuilder.buildCatchupUrl(
+            credentials.xtreamPortal,
+            credentials.xtreamUsername,
+            credentials.xtreamPassword,
+            item,
+            program,
+        )
+    }
+
     private fun fallbackOrError(item: MediaItem, message: String) {
         Toast.makeText(context, "$message Trying built-in player.", Toast.LENGTH_SHORT).show()
         launchBuiltin(item)
@@ -133,6 +186,7 @@ class PlaybackRouter(
                 context.applicationContext,
                 CredentialStore.getInstance(context),
                 PlayerSettings.getInstance(context),
+                RecentChannelsStore.getInstance(context),
             )
         }
     }

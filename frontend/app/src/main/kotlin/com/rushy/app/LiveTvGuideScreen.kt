@@ -40,16 +40,33 @@ fun LiveTvGuideScreen(
     repository: LocalMediaRepository,
     epgRepository: EpgRepository,
     onPlay: (MediaItem) -> Unit,
+    onPlayCatchup: (MediaItem, EpgProgram) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     var selectedCategoryId by remember { mutableStateOf("all") }
     var channels by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var recentChannels by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+
+    val sidebarCategories = remember(summary.liveCategories) {
+        listOf(
+            ChannelCategory("favorites", "★ Favorites"),
+            ChannelCategory("recent", "↺ Recently Watched"),
+        ) + summary.liveCategories
+    }
+
+    LaunchedEffect(Unit) {
+        recentChannels = repository.getRecentLiveChannels(12)
+    }
 
     LaunchedEffect(selectedCategoryId) {
         isLoading = true
         channels = runCatching {
-            repository.getLiveChannels(selectedCategoryId, "", 0, 250)
+            when (selectedCategoryId) {
+                "favorites" -> repository.getFavoriteLiveChannels(250)
+                "recent" -> repository.getRecentLiveChannels(250)
+                else -> repository.getLiveChannels(selectedCategoryId, "", 0, 250)
+            }
         }.getOrElse { emptyList() }
         isLoading = false
     }
@@ -60,7 +77,7 @@ fun LiveTvGuideScreen(
             .background(ThemeColors.DarkBackground),
     ) {
         LiveCategorySidebar(
-            categories = summary.liveCategories,
+            categories = sidebarCategories,
             selectedId = selectedCategoryId,
             onSelect = { selectedCategoryId = it },
             modifier = Modifier
@@ -83,7 +100,7 @@ fun LiveTvGuideScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val categoryName = summary.liveCategories
+                val categoryName = sidebarCategories
                     .firstOrNull { it.id == selectedCategoryId }?.name ?: "All Channels"
                 Text(
                     text = categoryName,
@@ -107,10 +124,19 @@ fun LiveTvGuideScreen(
                     Text("No channels in this category. Tap Sync.", color = ThemeColors.TextSecondary)
                 }
             } else {
+                if (recentChannels.isNotEmpty() && selectedCategoryId == "all") {
+                    HeroChannelRow(
+                        title = "Recently Watched",
+                        items = recentChannels,
+                        onPlay = onPlay,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
                 TvGuideScreen(
                     repository = repository,
                     epgRepository = epgRepository,
                     onPlay = onPlay,
+                    onPlayCatchup = onPlayCatchup,
                     channelsOverride = channels,
                     showHeader = false,
                     modifier = Modifier.fillMaxSize(),

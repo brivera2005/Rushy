@@ -36,7 +36,7 @@ object XmltvParser {
         try {
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "Rushy/1.5.0 (Android TV)")
+                .header("User-Agent", "Rushy/1.5.1 (Android TV)")
                 .build()
             val response = httpClient.newCall(request).execute()
             if (!response.isSuccessful) {
@@ -72,6 +72,7 @@ object XmltvParser {
         val results = ArrayList<EpgProgramEntity>(4096)
         var parsed = 0
 
+        try {
         openInputStream(file).use { stream ->
             val parser = Xml.newPullParser()
             parser.setInput(stream, "UTF-8")
@@ -133,22 +134,27 @@ object XmltvParser {
                 event = parser.next()
             }
         }
+        } catch (e: Exception) {
+            Log.e(TAG, "XMLTV parse failed for ${file.name}", e)
+            return@withContext emptyList()
+        }
         onProgress(parsed)
         results
     }
 
-    private fun openInputStream(file: File) = when {
-        file.name.endsWith(".gz", ignoreCase = true) -> GZIPInputStream(FileInputStream(file))
-        isGzipFile(file) -> GZIPInputStream(FileInputStream(file))
-        else -> FileInputStream(file)
-    }
-
-    private fun isGzipFile(file: File): Boolean {
-        if (!file.exists() || file.length() < 2) return false
-        return file.inputStream().use { stream ->
-            val b0 = stream.read()
-            val b1 = stream.read()
-            b0 == 0x1f && b1 == 0x8b
+    private fun openInputStream(file: File): java.io.InputStream {
+        val buffered = java.io.BufferedInputStream(FileInputStream(file))
+        buffered.mark(4)
+        val b0 = buffered.read()
+        val b1 = buffered.read()
+        buffered.reset()
+        val useGzip = file.name.endsWith(".gz", ignoreCase = true) || (b0 == 0x1f && b1 == 0x8b)
+        if (!useGzip) return buffered
+        return try {
+            GZIPInputStream(buffered)
+        } catch (e: Exception) {
+            Log.w(TAG, "Gzip decompress failed, reading as plain XML", e)
+            java.io.BufferedInputStream(FileInputStream(file))
         }
     }
 

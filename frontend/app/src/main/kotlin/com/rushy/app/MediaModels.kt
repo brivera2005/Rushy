@@ -28,6 +28,10 @@ data class MediaItem(
 
     val isHidden: Boolean = false,
 
+    val tvArchive: Boolean = false,
+
+    val tvArchiveDurationHours: Int? = null,
+
 )
 
 

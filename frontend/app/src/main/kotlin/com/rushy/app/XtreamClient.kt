@@ -44,6 +44,10 @@ data class XtreamStreamDto(
 
     @SerializedName("epg_channel_id") val epgChannelId: String? = null,
 
+    @SerializedName("tv_archive") val tvArchive: Int? = null,
+
+    @SerializedName("tv_archive_duration") val tvArchiveDuration: String? = null,
+
 )
 
 
@@ -683,6 +687,10 @@ class XtreamClient(
             categoryName = catId?.let { categoryMap[it] },
 
             epgChannelId = epgChannelId?.takeIf { it.isNotBlank() },
+
+            tvArchive = tvArchive == 1,
+
+            tvArchiveDurationHours = tvArchiveDuration?.toIntOrNull()?.takeIf { it > 0 },
 
         )
 

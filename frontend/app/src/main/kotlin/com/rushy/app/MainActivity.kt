@@ -591,6 +591,12 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
     }
 
+    fun playCatchup(item: MediaItem, program: EpgProgram) {
+
+        playback.playCatchup(item, program)
+
+    }
+
 
 
     LaunchedEffect(Unit) {
@@ -1121,8 +1127,12 @@ private fun HomeScreen(
         featured = repository.getFeaturedLive(14)
         recentMovies = repository.getItemsBySource(MediaSource.XTREAM_VOD, limit = 20)
         tmdbRows = trendingRepo.getHomeRows()
-        EpgSyncService.start(context, force = false)
-        epgRepository.ensureXmltvParsed()
+        runCatching {
+            EpgSyncService.start(context, force = false)
+            epgRepository.ensureXmltvParsed()
+        }.onFailure { e ->
+            Log.w("HomeScreen", "Background EPG load failed", e)
+        }
     }
 
     LaunchedEffect(featured) {

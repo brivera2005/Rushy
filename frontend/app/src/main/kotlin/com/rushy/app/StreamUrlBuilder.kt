@@ -23,6 +23,29 @@ object StreamUrlBuilder {
             MediaSource.PLEX -> ""
         }
     }
+
+    fun buildCatchupUrl(
+        portal: String,
+        username: String,
+        password: String,
+        item: MediaItem,
+        program: EpgProgram,
+    ): String {
+        val base = XtreamClient.normalizePortalUrl(portal).removeSuffix("/")
+        val encodedUser = UriEncoder.encode(username)
+        val encodedPass = UriEncoder.encode(password)
+        val durationMinutes = ((program.endEpochSec - program.startEpochSec) / 60).coerceAtLeast(1)
+        val start = CatchupTimeFormatter.format(program.startEpochSec)
+        val encodedStart = UriEncoder.encode(start)
+        return "$base/streaming/timeshift.php?username=$encodedUser&password=$encodedPass" +
+            "&stream=${item.playbackId}&start=$encodedStart&duration=$durationMinutes"
+    }
+}
+
+private object CatchupTimeFormatter {
+    private val format = java.text.SimpleDateFormat("yyyy-MM-dd:HH-mm", java.util.Locale.US)
+
+    fun format(epochSec: Long): String = format.format(java.util.Date(epochSec * 1000))
 }
 
 private object UriEncoder {

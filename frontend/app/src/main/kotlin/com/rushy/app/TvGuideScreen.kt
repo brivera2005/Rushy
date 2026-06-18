@@ -1,5 +1,6 @@
 package com.rushy.app
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -27,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.foundation.lazy.list.TvLazyColumn
@@ -51,6 +54,7 @@ fun TvGuideScreen(
     repository: LocalMediaRepository,
     epgRepository: EpgRepository,
     onPlay: (MediaItem) -> Unit,
+    onPlayCatchup: (MediaItem, EpgProgram) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
     channelsOverride: List<MediaItem>? = null,
     showHeader: Boolean = true,
@@ -61,6 +65,8 @@ fun TvGuideScreen(
     var epgData by remember { mutableStateOf<Map<String, List<EpgProgram>>>(emptyMap()) }
     var isLoadingChannels by remember { mutableStateOf(true) }
     var isLoadingEpg by remember { mutableStateOf(false) }
+    var epgLoadError by remember { mutableStateOf<String?>(null) }
+    var focusedChannelId by remember { mutableStateOf<String?>(null) }
     val loadState by epgRepository.loadState.collectAsState()
     val timelineScroll = rememberScrollState()
     val listState = rememberTvLazyListState()
@@ -84,26 +90,36 @@ fun TvGuideScreen(
             return@LaunchedEffect
         }
         isLoadingChannels = true
-        channels = repository.getLiveChannels(limit = 300)
-        EpgSyncService.start(context, force = false)
-        epgRepository.ensureXmltvParsed()
+        channels = runCatching { repository.getLiveChannels(limit = 300) }.getOrElse { emptyList() }
         isLoadingChannels = false
     }
 
-    LaunchedEffect(channelsOverride) {
-        if (channelsOverride == null) return@LaunchedEffect
-        EpgSyncService.start(context, force = false)
-        epgRepository.ensureXmltvParsed()
+    LaunchedEffect(channelsOverride, channels) {
+        if (channels.isEmpty()) return@LaunchedEffect
+        epgLoadError = null
+        runCatching {
+            EpgSyncService.start(context, force = false)
+            epgRepository.ensureXmltvParsed()
+        }.onFailure { e ->
+            Log.w("TvGuideScreen", "EPG load failed", e)
+            epgLoadError = e.message ?: "Failed to load TV guide"
+        }
     }
 
-    LaunchedEffect(channels, loadState.isLoading, loadState.programCount) {
+    LaunchedEffect(channels, loadState.isLoading, loadState.programCount, loadState.error) {
         if (channels.isEmpty() || loadState.isLoading) return@LaunchedEffect
         isLoadingEpg = true
-        val accumulated = mutableMapOf<String, List<EpgProgram>>()
-        channels.chunked(EPG_BATCH_SIZE).forEach { batch ->
-            val batchData = epgRepository.refreshEpg(batch)
-            accumulated.putAll(batchData)
-            epgData = accumulated.toMap()
+        epgLoadError = loadState.error
+        runCatching {
+            val accumulated = mutableMapOf<String, List<EpgProgram>>()
+            channels.chunked(EPG_BATCH_SIZE).forEach { batch ->
+                val batchData = epgRepository.refreshEpg(batch)
+                accumulated.putAll(batchData)
+                epgData = accumulated.toMap()
+            }
+        }.onFailure { e ->
+            Log.w("TvGuideScreen", "EPG refresh failed", e)
+            epgLoadError = e.message ?: "Failed to load programme data"
         }
         isLoadingEpg = false
     }
@@ -115,6 +131,16 @@ fun TvGuideScreen(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        val bannerError = epgLoadError ?: loadState.error
+        if (!showHeader && bannerError != null) {
+            Text(
+                text = "EPG: $bannerError",
+                style = MaterialTheme.typography.labelMedium,
+                color = ThemeColors.Error,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
+
         if (showHeader) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -150,6 +176,16 @@ fun TvGuideScreen(
                     Text("↻ Refresh Guide")
                 }
             }
+        }
+
+        val focusedChannel = channels.firstOrNull { it.id == focusedChannelId }
+        if (focusedChannel != null) {
+            val focusedPrograms = epgData[focusedChannel.playbackId].orEmpty().sortedBy { it.startEpochSec }
+            NowNextPanel(
+                channel = focusedChannel,
+                programs = focusedPrograms,
+                nowSec = nowSec,
+            )
         }
 
         Row(
@@ -235,10 +271,63 @@ fun TvGuideScreen(
                             nowSec = nowSec,
                             timelineScroll = timelineScroll,
                             onPlay = onPlay,
+                            onPlayCatchup = onPlayCatchup,
+                            onFocused = { focusedChannelId = channel.id },
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun NowNextPanel(
+    channel: MediaItem,
+    programs: List<EpgProgram>,
+    nowSec: Long,
+) {
+    val current = programs.firstOrNull { it.startEpochSec <= nowSec && it.endEpochSec > nowSec }
+    val next = programs.firstOrNull { it.startEpochSec > nowSec }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(ThemeColors.SurfaceElevated)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MediaThumbnailCompact(item = channel, size = 40.dp)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = channel.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ThemeColors.TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (channel.tvArchive) {
+                    Text(
+                        text = "⏪ Catch-up",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ThemeColors.AccentPrimary,
+                    )
+                }
+            }
+            Text(
+                text = buildString {
+                    append("Now: ")
+                    append(current?.title ?: "—")
+                    next?.let { append("  ·  Next: ${it.title}") }
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = ThemeColors.TextSecondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -252,6 +341,8 @@ private fun GuideChannelRow(
     nowSec: Long,
     timelineScroll: androidx.compose.foundation.ScrollState,
     onPlay: (MediaItem) -> Unit,
+    onPlayCatchup: (MediaItem, EpgProgram) -> Unit,
+    onFocused: () -> Unit,
 ) {
     val accent = LocalRushyTheme.current.currentAccentColor
     val totalWidth = (windowEnd - windowStart).toFloat()
@@ -268,14 +359,16 @@ private fun GuideChannelRow(
             .fillMaxWidth()
             .height(52.dp)
             .clip(RoundedCornerShape(4.dp))
-            .background(ThemeColors.SurfaceDark),
+            .background(ThemeColors.SurfaceDark)
+            .onFocusChanged { if (it.isFocused) onFocused() },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Button(
             onClick = { onPlay(channel) },
             modifier = Modifier
                 .width(CHANNEL_COL_WIDTH_DP.dp)
-                .fillMaxHeight(),
+                .fillMaxHeight()
+                .onFocusChanged { if (it.isFocused) onFocused() },
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 6.dp),
@@ -283,14 +376,22 @@ private fun GuideChannelRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 MediaThumbnailCompact(item = channel, size = 36.dp)
-                Text(
-                    text = channel.title,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = ThemeColors.TextPrimary,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = channel.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ThemeColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (channel.tvArchive) {
+                        Text(
+                            text = "⏪",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ThemeColors.AccentPrimary,
+                        )
+                    }
+                }
             }
         }
 
@@ -323,49 +424,114 @@ private fun GuideChannelRow(
                     programs.forEach { program ->
                         val startOffset = max(0f, (program.startEpochSec - windowStart).toFloat())
                         val endOffset = minOf(totalWidth, (program.endEpochSec - windowStart).toFloat())
-                        val widthFraction = ((endOffset - startOffset) / totalWidth).coerceAtLeast(0.04f)
+                        val widthFraction = ((endOffset - startOffset) / totalWidth).coerceIn(0.04f, 1f)
                         val leftFraction = startOffset / totalWidth
                         val isLive = program.startEpochSec <= nowSec && program.endEpochSec > nowSec
+                        val isPast = program.endEpochSec <= nowSec
+                        val canCatchup = isPast && channel.tvArchive
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(widthFraction)
-                                .offset(x = (leftFraction * TIMELINE_WIDTH_DP).dp)
-                                .padding(horizontal = 1.dp, vertical = 4.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(
-                                    if (isLive) ThemeColors.SurfaceElevated else ThemeColors.SurfaceDark,
-                                )
-                                .then(
-                                    if (isLive) Modifier.background(ThemeColors.FocusBackground.copy(alpha = 0.35f))
-                                    else Modifier,
-                                )
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                            contentAlignment = Alignment.CenterStart,
-                        ) {
-                            Column {
-                                Text(
-                                    text = program.title,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isLive) ThemeColors.TextPrimary else ThemeColors.TextSecondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (isLive) {
-                                    val remaining = ((program.endEpochSec - nowSec) / 60).coerceAtLeast(0)
-                                    Text(
-                                        text = "${remaining}m left",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = ThemeColors.AccentPrimary,
-                                        maxLines = 1,
-                                    )
-                                }
-                            }
-                        }
+                        GuideProgramCell(
+                            program = program,
+                            isLive = isLive,
+                            canCatchup = canCatchup,
+                            nowSec = nowSec,
+                            widthFraction = widthFraction,
+                            leftFraction = leftFraction,
+                            onPlayLive = { onPlay(channel) },
+                            onPlayCatchup = { onPlayCatchup(channel, program) },
+                            onFocused = onFocused,
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun GuideProgramCell(
+    program: EpgProgram,
+    isLive: Boolean,
+    canCatchup: Boolean,
+    nowSec: Long,
+    widthFraction: Float,
+    leftFraction: Float,
+    onPlayLive: () -> Unit,
+    onPlayCatchup: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    val bgColor = when {
+        isLive -> ThemeColors.SurfaceElevated
+        canCatchup -> ThemeColors.SurfaceElevated.copy(alpha = 0.7f)
+        else -> ThemeColors.SurfaceDark
+    }
+    val content = @Composable {
+        Column {
+            Text(
+                text = program.title,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isLive || canCatchup) ThemeColors.TextPrimary else ThemeColors.TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            when {
+                isLive -> {
+                    val remaining = ((program.endEpochSec - nowSec) / 60).coerceAtLeast(0)
+                    Text(
+                        text = "${remaining}m left",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ThemeColors.AccentPrimary,
+                        maxLines = 1,
+                    )
+                }
+                canCatchup -> {
+                    Text(
+                        text = "Watch",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ThemeColors.AccentPrimary,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+
+    val cellModifier = Modifier
+        .fillMaxHeight()
+        .fillMaxWidth(widthFraction)
+        .offset(x = (leftFraction * TIMELINE_WIDTH_DP).dp)
+        .padding(horizontal = 1.dp, vertical = 4.dp)
+
+    if (isLive || canCatchup) {
+        Button(
+            onClick = { if (canCatchup) onPlayCatchup() else onPlayLive() },
+            modifier = cellModifier
+                .onFocusChanged { if (it.isFocused) onFocused() },
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(bgColor)
+                    .then(
+                        if (isLive) Modifier.background(ThemeColors.FocusBackground.copy(alpha = 0.35f))
+                        else Modifier,
+                    )
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                content()
+            }
+        }
+    } else {
+        Box(
+            modifier = cellModifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(bgColor)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            content()
         }
     }
 }

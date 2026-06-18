@@ -35,6 +35,8 @@ data class MediaItemEntity(
     val rating: String? = null,
     @ColumnInfo(name = "is_favorite") val isFavorite: Boolean = false,
     @ColumnInfo(name = "is_hidden") val isHidden: Boolean = false,
+    @ColumnInfo(name = "tv_archive") val tvArchive: Boolean = false,
+    @ColumnInfo(name = "tv_archive_duration") val tvArchiveDurationHours: Int? = null,
 )
 
 @Entity(
@@ -130,6 +132,19 @@ interface MediaDao {
 
     @Query(
         """
+        SELECT * FROM media_items
+        WHERE is_favorite = 1 AND is_hidden = 0 AND source = :source
+        ORDER BY title COLLATE NOCASE
+        LIMIT :limit
+        """,
+    )
+    suspend fun getFavoritesBySource(source: String, limit: Int): List<MediaItemEntity>
+
+    @Query("SELECT * FROM media_items WHERE id IN (:ids) AND is_hidden = 0")
+    suspend fun getByIds(ids: List<String>): List<MediaItemEntity>
+
+    @Query(
+        """
         SELECT * FROM media_items WHERE is_hidden = 0 AND title LIKE '%' || :query || '%' COLLATE NOCASE
         LIMIT :limit
         """,
@@ -215,7 +230,7 @@ interface EpgDao {
 
 @Database(
     entities = [MediaItemEntity::class, EpgProgramEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class MediaDatabase : RoomDatabase() {
@@ -252,6 +267,8 @@ fun MediaItemEntity.toMediaItem(): MediaItem = MediaItem(
     rating = rating,
     isFavorite = isFavorite,
     isHidden = isHidden,
+    tvArchive = tvArchive,
+    tvArchiveDurationHours = tvArchiveDurationHours,
 )
 
 fun MediaItem.toEntity(): MediaItemEntity = MediaItemEntity(
@@ -267,4 +284,6 @@ fun MediaItem.toEntity(): MediaItemEntity = MediaItemEntity(
     rating = rating,
     isFavorite = isFavorite,
     isHidden = isHidden,
+    tvArchive = tvArchive,
+    tvArchiveDurationHours = tvArchiveDurationHours,
 )

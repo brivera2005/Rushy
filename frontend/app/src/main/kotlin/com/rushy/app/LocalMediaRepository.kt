@@ -192,6 +192,30 @@ class LocalMediaRepository private constructor(
 
 
 
+    suspend fun getFavoriteLiveChannels(limit: Int = 200): List<MediaItem> = withContext(Dispatchers.IO) {
+
+        dao.getFavoritesBySource(MediaSource.XTREAM_LIVE.name, limit).map { it.toMediaItem() }
+
+    }
+
+
+
+    suspend fun getRecentLiveChannels(limit: Int = 16): List<MediaItem> = withContext(Dispatchers.IO) {
+
+        val recentStore = RecentChannelsStore.getInstance(context)
+
+        val ids = recentStore.getIds().take(limit)
+
+        if (ids.isEmpty()) return@withContext emptyList()
+
+        val byId = dao.getByIds(ids).map { it.toMediaItem() }.associateBy { it.id }
+
+        ids.mapNotNull { byId[it] }.filter { it.source == MediaSource.XTREAM_LIVE }
+
+    }
+
+
+
     suspend fun getFeaturedLive(limit: Int = 12): List<MediaItem> = withContext(Dispatchers.IO) {
 
         dao.getRandomFeatured(MediaSource.XTREAM_LIVE.name, limit).map { it.toMediaItem() }

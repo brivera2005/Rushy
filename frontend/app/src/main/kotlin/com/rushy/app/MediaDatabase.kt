@@ -99,6 +99,25 @@ interface MediaDao {
 
     @Query(
         """
+        SELECT * FROM media_items WHERE source = :source AND is_hidden = 0
+        AND (:categoryId = 'all' OR category_id = :categoryId)
+        AND (:search = '' OR title LIKE '%' || :search || '%' COLLATE NOCASE)
+        ORDER BY
+            CASE WHEN rating IS NULL OR rating = '' THEN 0 ELSE CAST(rating AS REAL) END DESC,
+            title COLLATE NOCASE
+        LIMIT :limit OFFSET :offset
+        """,
+    )
+    suspend fun getItemsPagedByRating(
+        source: String,
+        categoryId: String,
+        search: String,
+        limit: Int,
+        offset: Int,
+    ): List<MediaItemEntity>
+
+    @Query(
+        """
         SELECT COUNT(*) FROM media_items WHERE source = :source AND is_hidden = 0
         AND (:categoryId = 'all' OR category_id = :categoryId)
         AND (:search = '' OR title LIKE '%' || :search || '%' COLLATE NOCASE)
@@ -142,6 +161,16 @@ interface MediaDao {
         """,
     )
     suspend fun getEpgChannelIds(source: String): List<String>
+
+    @Query(
+        """
+        SELECT DISTINCT playbackId FROM media_items
+        WHERE source = :source AND is_hidden = 0
+        AND (epg_channel_id IS NULL OR epg_channel_id = '')
+        AND playbackId IS NOT NULL AND playbackId != ''
+        """,
+    )
+    suspend fun getLivePlaybackIdsWithoutEpg(source: String): List<String>
 }
 
 @Dao

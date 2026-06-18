@@ -338,7 +338,7 @@ private fun GuideChannelRow(
                                     if (isLive) ThemeColors.SurfaceElevated else ThemeColors.SurfaceDark,
                                 )
                                 .then(
-                                    if (isLive) Modifier.border(2.dp, ThemeColors.FocusBorder, RoundedCornerShape(4.dp))
+                                    if (isLive) Modifier.background(ThemeColors.FocusBackground.copy(alpha = 0.35f))
                                     else Modifier,
                                 )
                                 .padding(horizontal = 6.dp, vertical = 2.dp),

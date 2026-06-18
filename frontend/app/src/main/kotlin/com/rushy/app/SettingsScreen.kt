@@ -87,7 +87,7 @@ fun SettingsScreen(
                         is UpdateCheckResult.UpToDate ->
                             "You are on the latest version (v${BuildConfig.VERSION_NAME})."
                         is UpdateCheckResult.UpdateAvailable ->
-                            "Update found: v${result.info.versionName} — installing automatically..."
+                            "Update found: v${result.info.versionName} — use the Update button in the header"
                         is UpdateCheckResult.Error -> result.message
                     }
                 }

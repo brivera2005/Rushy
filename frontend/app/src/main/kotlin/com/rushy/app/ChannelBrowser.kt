@@ -509,15 +509,18 @@ fun VirtualizedMediaGrid(
 
         items(items, key = { it.id }) { item ->
 
+            var focused by remember(item.id) { mutableStateOf(false) }
+
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
 
-                Button(onClick = { onItemClick(item) }) {
-                    var focused by remember { mutableStateOf(false) }
+                Button(
+                    onClick = { onItemClick(item) },
+                    modifier = Modifier.onFocusChanged { focused = it.isFocused },
+                ) {
                     LiveChannelTile(
                         item = item,
                         subtitle = nowPlaying[item.playbackId],
                         isFocused = focused,
-                        modifier = Modifier.onFocusChanged { focused = it.isFocused },
                     )
                 }
 
@@ -548,255 +551,191 @@ fun VirtualizedMediaGrid(
 
 
 @Composable
-
 fun MoviesBrowserScreen(
-
     summary: CatalogSummary,
-
     repository: LocalMediaRepository,
-
     onPlay: (MediaItem) -> Unit,
-
     modifier: Modifier = Modifier,
-
 ) {
-
-    var searchInput by remember { mutableStateOf("") }
-
-    var debouncedSearch by remember { mutableStateOf("") }
-
-    var selectedCategoryId by remember { mutableStateOf("all") }
-
-
-
-    LaunchedEffect(searchInput) {
-
-        delay(350)
-
-        debouncedSearch = searchInput
-
-    }
-
-
-
-    Column(
-
-        modifier = modifier.fillMaxSize(),
-
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-
-    ) {
-
-        Text(
-
-            text = "Movies & Series (${summary.movieCount})",
-
-            style = MaterialTheme.typography.headlineSmall,
-
-            color = ThemeColors.TextPrimary,
-
-        )
-
-
-
-        SearchField(
-
-            query = searchInput,
-
-            onQueryChange = { searchInput = it },
-
-            placeholder = "Search ${summary.movieCount} titles...",
-
-        )
-
-
-
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-
-        if (debouncedSearch.isNotBlank()) {
-
-            CategoryResultsGrid(
-
-                repository = repository,
-
-                categoryId = "all",
-
-                search = debouncedSearch,
-
-                source = MediaSource.XTREAM_VOD,
-
-                onPlay = onPlay,
-
-            )
-
-        } else {
-
-            val displayCategories = if (summary.vodCategories.size > 1) {
-
-                summary.vodCategories.filter { it.id != "all" }.take(12)
-
-            } else {
-
-                listOf(ChannelCategory("all", "All Movies & Series"))
-
-            }
-
-
-
-            displayCategories.forEach { category ->
-
-                CategoryCarouselRow(
-
-                    title = category.name,
-
-                    repository = repository,
-
-                    categoryId = category.id,
-
-                    onPlay = onPlay,
-
-                )
-
-            }
-
-        }
-
-        }
-
-    }
-
+    SplitMediaBrowser(
+        sidebarTitle = "Genres",
+        categories = summary.vodCategories.ifEmpty {
+            listOf(ChannelCategory("all", "All"))
+        },
+        source = MediaSource.XTREAM_VOD,
+        repository = repository,
+        onPlay = onPlay,
+        modifier = modifier,
+    )
 }
 
-
+@Composable
+fun TvShowsBrowserScreen(
+    summary: CatalogSummary,
+    repository: LocalMediaRepository,
+    onPlay: (MediaItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SplitMediaBrowser(
+        sidebarTitle = "Genres",
+        categories = summary.seriesCategories.ifEmpty {
+            listOf(ChannelCategory("all", "All"))
+        },
+        source = MediaSource.XTREAM_SERIES,
+        repository = repository,
+        onPlay = onPlay,
+        modifier = modifier,
+    )
+}
 
 @Composable
-
-fun TvShowsBrowserScreen(
-
-    summary: CatalogSummary,
-
+private fun SplitMediaBrowser(
+    sidebarTitle: String,
+    categories: List<ChannelCategory>,
+    source: MediaSource,
     repository: LocalMediaRepository,
-
     onPlay: (MediaItem) -> Unit,
-
     modifier: Modifier = Modifier,
-
 ) {
+    var selectedCategoryId by remember { mutableStateOf("all") }
+    var items by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var isLoadingMore by remember { mutableStateOf(false) }
+    var hasMore by remember { mutableStateOf(true) }
+    val gridState = rememberLazyGridState()
 
-    var searchInput by remember { mutableStateOf("") }
-
-    var debouncedSearch by remember { mutableStateOf("") }
-
-
-
-    LaunchedEffect(searchInput) {
-
-        delay(350)
-
-        debouncedSearch = searchInput
-
+    LaunchedEffect(selectedCategoryId, source) {
+        isLoading = true
+        hasMore = true
+        items = runCatching {
+            repository.getItemsBySourceByRating(source, selectedCategoryId, "", 0, LocalMediaRepository.PAGE_SIZE)
+        }.getOrElse { emptyList() }
+        hasMore = items.size >= LocalMediaRepository.PAGE_SIZE
+        isLoading = false
     }
 
-
-
-    Column(
-
-        modifier = modifier.fillMaxSize(),
-
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-
-    ) {
-
-        Text(
-
-            text = "TV Shows",
-
-            style = MaterialTheme.typography.headlineSmall,
-
-            color = ThemeColors.TextPrimary,
-
-        )
-
-
-
-        SearchField(
-
-            query = searchInput,
-
-            onQueryChange = { searchInput = it },
-
-            placeholder = "Search series...",
-
-        )
-
-
-
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-
-            if (debouncedSearch.isNotBlank()) {
-
-                CategoryResultsGrid(
-
-                    repository = repository,
-
-                    categoryId = "all",
-
-                    search = debouncedSearch,
-
-                    source = MediaSource.XTREAM_SERIES,
-
-                    onPlay = onPlay,
-
-                )
-
-            } else {
-
-                val categories = summary.vodCategories.filter { it.id != "all" }.take(12)
-
-                if (categories.isEmpty()) {
-
-                    CategoryCarouselRow(
-
-                        title = "All Series",
-
-                        repository = repository,
-
-                        categoryId = "all",
-
-                        source = MediaSource.XTREAM_SERIES,
-
-                        onPlay = onPlay,
-
+    LaunchedEffect(gridState, selectedCategoryId, items.size, hasMore, isLoading) {
+        snapshotFlow {
+            val info = gridState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last to info.totalItemsCount
+        }.collect { (lastVisible, total) ->
+            if (!hasMore || isLoadingMore || isLoading) return@collect
+            if (lastVisible >= total - 8 && items.size % LocalMediaRepository.PAGE_SIZE == 0 && items.isNotEmpty()) {
+                isLoadingMore = true
+                try {
+                    val more = repository.getItemsBySourceByRating(
+                        source,
+                        selectedCategoryId,
+                        "",
+                        items.size,
+                        LocalMediaRepository.PAGE_SIZE,
                     )
-
-                } else {
-
-                    categories.forEach { category ->
-
-                        CategoryCarouselRow(
-
-                            title = category.name,
-
-                            repository = repository,
-
-                            categoryId = category.id,
-
-                            source = MediaSource.XTREAM_SERIES,
-
-                            onPlay = onPlay,
-
-                        )
-
+                    if (more.isNotEmpty()) {
+                        items = items + more
                     }
-
+                    hasMore = more.size >= LocalMediaRepository.PAGE_SIZE
+                } finally {
+                    isLoadingMore = false
                 }
+            }
+        }
+    }
 
+    Row(
+        modifier = modifier
+            .fillMaxSize()
+            .background(ThemeColors.DarkBackground),
+    ) {
+        CategoryFilterSidebar(
+            title = sidebarTitle,
+            categories = categories,
+            selectedId = selectedCategoryId,
+            onSelect = { selectedCategoryId = it },
+            modifier = Modifier
+                .width(220.dp)
+                .fillMaxHeight()
+                .background(ThemeColors.SidebarBackground)
+                .padding(vertical = 8.dp, horizontal = 8.dp),
+        )
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .padding(start = 12.dp, top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val categoryName = categories.firstOrNull { it.id == selectedCategoryId }?.name ?: "All"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = categoryName,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = ThemeColors.TextPrimary,
+                )
+                Text(
+                    text = if (isLoading) "Loading..." else "${items.size} titles",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ThemeColors.TextSecondary,
+                )
             }
 
+            when {
+                isLoading -> PosterSkeletonGrid(modifier = Modifier.weight(1f))
+                items.isEmpty() -> Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("No titles in this category. Tap Sync.", color = ThemeColors.TextSecondary)
+                }
+                else -> PosterResultsGrid(
+                    items = items,
+                    gridState = gridState,
+                    onPlay = onPlay,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            if (isLoadingMore) {
+                Text("Loading more...", color = ThemeColors.TextMuted)
+            }
         }
-
     }
+}
 
+@Composable
+private fun PosterSkeletonGrid(modifier: Modifier = Modifier) {
+    SkeletonGrid(columns = 6, rows = 3, modifier = modifier)
+}
+
+@Composable
+private fun PosterResultsGrid(
+    items: List<MediaItem>,
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    onPlay: (MediaItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(6),
+        state = gridState,
+        modifier = modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(items, key = { it.id }) { item ->
+            var focused by remember(item.id) { mutableStateOf(false) }
+            Button(
+                onClick = { onPlay(item) },
+                modifier = Modifier.onFocusChanged { focused = it.isFocused },
+            ) {
+                PosterCard(item = item, isFocused = focused)
+            }
+        }
+    }
 }
 
 
@@ -933,7 +872,11 @@ private fun CategoryResultsGrid(
 
 @Composable
 
-fun PosterCard(item: MediaItem, modifier: Modifier = Modifier) {
+fun PosterCard(
+    item: MediaItem,
+    modifier: Modifier = Modifier,
+    isFocused: Boolean = false,
+) {
     Column(
         modifier = modifier.width(118.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -943,7 +886,7 @@ fun PosterCard(item: MediaItem, modifier: Modifier = Modifier) {
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f),
         ) {
-            MediaThumbnailDense(item = item, modifier = Modifier.fillMaxWidth())
+            MediaThumbnailDense(item = item, modifier = Modifier.fillMaxWidth(), isFocused = isFocused)
             item.rating?.let { rating ->
                 Text(
                     text = "★ $rating",

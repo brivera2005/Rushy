@@ -36,7 +36,7 @@ object XmltvParser {
         try {
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "Rushy/1.2.1 (Android TV)")
+                .header("User-Agent", "Rushy/1.5.0 (Android TV)")
                 .build()
             val response = httpClient.newCall(request).execute()
             if (!response.isSuccessful) {
@@ -72,12 +72,7 @@ object XmltvParser {
         val results = ArrayList<EpgProgramEntity>(4096)
         var parsed = 0
 
-        val inputStream = when {
-            file.name.endsWith(".gz") -> GZIPInputStream(FileInputStream(file))
-            else -> FileInputStream(file)
-        }
-
-        inputStream.use { stream ->
+        openInputStream(file).use { stream ->
             val parser = Xml.newPullParser()
             parser.setInput(stream, "UTF-8")
             var event = parser.eventType
@@ -140,6 +135,21 @@ object XmltvParser {
         }
         onProgress(parsed)
         results
+    }
+
+    private fun openInputStream(file: File) = when {
+        file.name.endsWith(".gz", ignoreCase = true) -> GZIPInputStream(FileInputStream(file))
+        isGzipFile(file) -> GZIPInputStream(FileInputStream(file))
+        else -> FileInputStream(file)
+    }
+
+    private fun isGzipFile(file: File): Boolean {
+        if (!file.exists() || file.length() < 2) return false
+        return file.inputStream().use { stream ->
+            val b0 = stream.read()
+            val b1 = stream.read()
+            b0 == 0x1f && b1 == 0x8b
+        }
     }
 
     private fun parseXmltvTime(raw: String?): Long? {

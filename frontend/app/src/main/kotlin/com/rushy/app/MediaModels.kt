@@ -64,6 +64,8 @@ data class CatalogSummary(
 
     val vodCategories: List<ChannelCategory> = emptyList(),
 
+    val seriesCategories: List<ChannelCategory> = emptyList(),
+
 ) {
 
     val movieCount: Int get() = vodCount + seriesCount

@@ -13,12 +13,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 
 fun Modifier.tvFocusHighlight(
     shape: Shape = RoundedCornerShape(ThemeColors.CornerRadius),
-    focused: Boolean,
+    focused: Boolean = false,
+    selected: Boolean = false,
 ): Modifier = then(
-    if (focused) {
+    if (focused || selected) {
         Modifier.border(ThemeColors.FocusRingWidth, ThemeColors.FocusBorder, shape)
     } else {
-        Modifier.border(1.dp, ThemeColors.SurfaceElevated, shape)
+        Modifier
     },
 )
 

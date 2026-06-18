@@ -121,7 +121,8 @@ fun LiveTvGuideScreen(
 }
 
 @Composable
-private fun LiveCategorySidebar(
+fun CategoryFilterSidebar(
+    title: String,
     categories: List<ChannelCategory>,
     selectedId: String,
     onSelect: (String) -> Unit,
@@ -129,7 +130,7 @@ private fun LiveCategorySidebar(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Categories",
+            text = title,
             style = MaterialTheme.typography.titleMedium,
             color = ThemeColors.TextPrimary,
             fontWeight = FontWeight.Bold,
@@ -156,7 +157,9 @@ private fun LiveCategorySidebar(
                             .clip(shape)
                             .then(
                                 when {
-                                    selected -> Modifier.background(ThemeColors.FocusBackground)
+                                    selected -> Modifier
+                                        .background(ThemeColors.FocusBackground)
+                                        .tvFocusHighlight(shape = shape, selected = true)
                                     focused -> Modifier
                                         .background(ThemeColors.SurfaceElevated)
                                         .tvFocusHighlight(shape = shape, focused = true)
@@ -180,4 +183,20 @@ private fun LiveCategorySidebar(
             }
         }
     }
+}
+
+@Composable
+private fun LiveCategorySidebar(
+    categories: List<ChannelCategory>,
+    selectedId: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    CategoryFilterSidebar(
+        title = "Categories",
+        categories = categories,
+        selectedId = selectedId,
+        onSelect = onSelect,
+        modifier = modifier,
+    )
 }

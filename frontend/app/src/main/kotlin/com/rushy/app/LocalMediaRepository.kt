@@ -152,6 +152,28 @@ class LocalMediaRepository private constructor(
 
 
 
+    suspend fun getItemsBySourceByRating(
+
+        source: MediaSource,
+
+        categoryId: String = "all",
+
+        search: String = "",
+
+        offset: Int = 0,
+
+        limit: Int = PAGE_SIZE,
+
+    ): List<MediaItem> = withContext(Dispatchers.IO) {
+
+        dao.getItemsPagedByRating(source.name, categoryId, search.trim(), limit, offset)
+
+            .map { it.toMediaItem() }
+
+    }
+
+
+
     suspend fun countInCategory(source: MediaSource, categoryId: String, search: String = ""): Int =
 
         withContext(Dispatchers.IO) {
@@ -603,11 +625,15 @@ class LocalMediaRepository private constructor(
 
             ChannelCategory(it.categoryId, it.categoryName ?: "Category ${it.categoryId}")
 
-        } + dao.getCategories(MediaSource.XTREAM_SERIES.name).map {
+        }
+
+
+
+        val seriesCategories = dao.getCategories(MediaSource.XTREAM_SERIES.name).map {
 
             ChannelCategory(it.categoryId, it.categoryName ?: "Series ${it.categoryId}")
 
-        }.distinctBy { it.id }
+        }
 
 
 
@@ -625,7 +651,9 @@ class LocalMediaRepository private constructor(
 
             liveCategories = listOf(ChannelCategory("all", "All Channels")) + liveCategories,
 
-            vodCategories = listOf(ChannelCategory("all", "All")) + vodCategories.distinctBy { it.id },
+            vodCategories = listOf(ChannelCategory("all", "All")) + vodCategories,
+
+            seriesCategories = listOf(ChannelCategory("all", "All")) + seriesCategories,
 
         )
 

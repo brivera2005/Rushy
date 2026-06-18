@@ -145,7 +145,9 @@ fun CategoryPillRow(
                         .clip(shape)
                         .then(
                             when {
-                                selected -> Modifier.background(ThemeColors.FocusBackground)
+                                selected -> Modifier
+                                    .background(ThemeColors.FocusBackground)
+                                    .tvFocusHighlight(shape = shape, selected = true)
                                 focused -> Modifier
                                     .background(ThemeColors.SurfaceElevated)
                                     .tvFocusHighlight(shape = shape, focused = true)

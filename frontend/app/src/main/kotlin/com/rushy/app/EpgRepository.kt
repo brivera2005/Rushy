@@ -74,10 +74,14 @@ class EpgRepository private constructor(
             val now = System.currentTimeMillis() / 1000
             val windowStart = now - 1800
             val windowEnd = now + 4 * 3600
-            val epgIds = channels.mapNotNull { it.epgChannelId?.takeIf { id -> id.isNotBlank() } }.distinct()
+            val epgIds = channels.mapNotNull { channel ->
+                channel.epgChannelId?.takeIf { it.isNotBlank() }
+                    ?: channel.playbackId.takeIf { it.isNotBlank() }
+            }.distinct()
             val byEpgId = getProgramsForChannels(epgIds, windowStart, windowEnd)
             channels.associate { channel ->
-                val programs = channel.epgChannelId?.let { byEpgId[it] }.orEmpty()
+                val key = channel.epgChannelId?.takeIf { it.isNotBlank() } ?: channel.playbackId
+                val programs = key?.let { byEpgId[it] }.orEmpty()
                 channel.playbackId to programs
             }
         }
@@ -120,7 +124,7 @@ class EpgRepository private constructor(
             }
 
             _loadState.value = EpgLoadState("Parsing guide...", true, 0, 0)
-            val channelIds = mediaDao.getEpgChannelIds(MediaSource.XTREAM_LIVE.name).toSet()
+            val channelIds = buildEpgChannelIdSet()
             if (channelIds.isEmpty()) {
                 _loadState.value = EpgLoadState(
                     "No EPG channel mapping",
@@ -184,6 +188,12 @@ class EpgRepository private constructor(
             }
             channel.playbackId to programs
         }
+    }
+
+    private suspend fun buildEpgChannelIdSet(): Set<String> {
+        val ids = mediaDao.getEpgChannelIds(MediaSource.XTREAM_LIVE.name).toMutableSet()
+        ids.addAll(mediaDao.getLivePlaybackIdsWithoutEpg(MediaSource.XTREAM_LIVE.name))
+        return ids
     }
 
     private fun portalFingerprint(): String =

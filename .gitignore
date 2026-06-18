@@ -67,3 +67,5 @@ frontend/trakt.properties
 
 # Local IPTV credentials (never commit)
 frontend/app/src/main/kotlin/com/rushy/app/DefaultCredentials.kt
+Rushy-fork/local.properties
+Rushy-fork/app/src/main/java/com/streamvault/app/DefaultCredentials.kt

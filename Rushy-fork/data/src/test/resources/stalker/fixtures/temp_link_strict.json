@@ -1,0 +1,31 @@
+{
+  "name": "temp_link_strict",
+  "device": {
+    "portalUrl": "https://portal.example.com/c",
+    "macAddress": "00:1A:79:FA:CE:02",
+    "authMode": "MAC_PLUS_CREDENTIALS",
+    "username": "demo",
+    "password": "secret"
+  },
+  "responses": [
+    { "action": "handshake", "body": "{\"js\":{\"token\":\"token-strict\"}}" },
+    { "action": "do_auth", "method": "POST", "body": "{\"js\":{\"status\":1}}" },
+    { "action": "get_profile", "body": "{\"js\":{\"id\":\"77\",\"name\":\"Strict Temp\",\"status\":\"1\",\"auth_access\":true}}" },
+    { "action": "get_main_info", "body": "{\"js\":{\"id\":\"77\",\"name\":\"Strict Temp\",\"status\":\"1\",\"auth_access\":true}}" },
+    { "action": "get_localization", "body": "{\"js\":{\"lang\":\"en\",\"timezone\":\"UTC\"}}" },
+    { "action": "get_all_channels", "body": "{\"js\":{\"data\":[{\"id\":\"200\",\"name\":\"Cinema\",\"tv_genre_id\":\"11\",\"cmd\":\"ffmpeg http://localhost/ch/200_\",\"use_http_tmp_link\":\"1\",\"nginx_secure_link\":\"1\"}]}}" },
+    { "action": "create_link", "body": "{\"js\":{\"cmd\":\"ffmpeg http://strict.example.com/play/live.php?stream=200&play_token=xyz\"}}" }
+  ],
+  "expected": {
+    "authMode": "MAC_PLUS_CREDENTIALS",
+    "portalProfile": "AUTH_PLUS_MAG",
+    "portalFingerprint": "AUTH_STRICT_MAG",
+    "magPreset": "MAG254_STRICT",
+    "bootstrapRecipe": "AUTH_STRICT_MAG",
+    "recipeEvidence": ["recipe:AUTH_STRICT_MAG", "preset:MAG254_STRICT"],
+    "bootstrapEvidence": ["handshake", "do_auth", "get_profile", "get_account_info", "get_localization"],
+    "requestOrder": ["handshake", "do_auth", "get_profile", "get_main_info", "get_localization", "get_all_channels", "create_link"],
+    "playbackMode": "PLAY_LIVE_PORTAL",
+    "resolvedPlaybackUrl": "http://strict.example.com/play/live.php?stream=200&play_token=xyz"
+  }
+}

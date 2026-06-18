@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-files-path
+        name="apk_downloads"
+        path="Download/" />
+    <external-files-path
+        name="backup_exports"
+        path="Documents/Backups/" />
+    <files-path
+        name="backup_exports_internal"
+        path="Backups/" />
+    <files-path
+        name="crash_reports"
+        path="diagnostics/crash/" />
+    <cache-path
+        name="backup_imports"
+        path="backup_imports/" />
+</paths>

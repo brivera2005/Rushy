@@ -1,0 +1,29 @@
+{
+  "name": "archive_create_link",
+  "device": {
+    "portalUrl": "https://portal.example.com/c",
+    "macAddress": "00:1A:79:AC:10:01",
+    "authMode": "AUTO"
+  },
+  "responses": [
+    { "action": "handshake", "body": "{\"js\":{\"token\":\"token-archive-create\"}}" },
+    { "action": "get_profile", "body": "{\"js\":{\"id\":\"501\",\"name\":\"Archive Create\",\"status\":\"1\",\"auth_access\":true}}" },
+    { "action": "get_all_channels", "body": "{\"js\":{\"data\":[{\"id\":\"401\",\"name\":\"Archive Link\",\"tv_genre_id\":\"10\",\"cmd\":\"ffmpeg http://localhost/ch/401_\",\"use_http_tmp_link\":\"1\",\"archive\":\"1\",\"allow_local_timeshift\":\"1\"}]}}" },
+    { "action": "create_link", "body": "{\"js\":{\"cmd\":\"ffmpeg http://portal.example.com/play/live.php?stream=401&play_token=arch401\"}}" }
+  ],
+  "expected": {
+    "authMode": "MAC_ONLY",
+    "portalProfile": "MAG_BASIC",
+    "bootstrapEvidence": ["handshake", "get_profile"],
+    "requestOrder": ["handshake", "get_profile", "get_all_channels", "create_link"],
+    "cookieMode": "CREATE_LINK",
+    "archiveEndpointPreference": "SERVER_LOAD",
+    "archiveViaCreateLink": true,
+    "archiveRequiresStrictCookies": false,
+    "streamKind": "ARCHIVE",
+    "playbackMode": "PLAY_LIVE_PORTAL",
+    "resolvedPlaybackUrl": "http://portal.example.com/play/live.php?stream=401&play_token=arch401&utc=1715853600&lutc=1715857200",
+    "catchUpStartSeconds": 1715853600,
+    "catchUpEndSeconds": 1715857200
+  }
+}

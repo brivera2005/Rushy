@@ -1,0 +1,18 @@
+{
+  "name": "mac_basic",
+  "device": {
+    "portalUrl": "https://portal.example.com/c",
+    "macAddress": "00:1A:79:12:34:56",
+    "authMode": "AUTO"
+  },
+  "responses": [
+    { "action": "handshake", "body": "{\"js\":{\"token\":\"token-123\"}}" },
+    { "action": "get_profile", "body": "{\"js\":{\"id\":\"77\",\"name\":\"Living Room\",\"status\":\"1\",\"auth_access\":true}}" }
+  ],
+  "expected": {
+    "authMode": "MAC_ONLY",
+    "portalProfile": "MAG_BASIC",
+    "bootstrapEvidence": ["handshake", "get_profile"],
+    "requestOrder": ["handshake", "get_profile"]
+  }
+}

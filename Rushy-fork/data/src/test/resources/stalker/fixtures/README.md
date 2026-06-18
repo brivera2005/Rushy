@@ -1,0 +1,29 @@
+# Stalker Replay Fixtures
+
+These fixtures model sanitized portal families for the Stalker replay harness.
+
+To onboard a new real-world portal:
+1. Capture the ordered `handshake`, auth, profile, modules, catalog, and `create_link` responses.
+2. Remove real domains, tokens, credentials, MAC addresses, and account identifiers.
+3. Keep the request action order intact so recipe fallback behavior stays deterministic.
+4. Save the fixture as `data/src/test/resources/stalker/fixtures/<family>.json`.
+5. Add the file to `StalkerPortalReplayHarnessTest` and assert the expected auth mode, portal profile, fingerprint, MAG preset, and bootstrap recipe.
+6. For catch-up/archive portals, include the expected `streamKind`, `catchUpStartSeconds`, `catchUpEndSeconds`, and any archive fingerprint evidence fields.
+
+The goal is to encode new portal families as data plus recipe rules, not ad hoc code paths.
+
+Capture/export helper:
+
+```powershell
+.\tools\stalker-har-to-fixture.ps1 `
+  -InputPath .\capture.har `
+  -OutputPath .\data\src\test\resources\stalker\fixtures\new_portal.json `
+  -FixtureName new_portal `
+  -PortalUrl https://real.portal.example/c `
+  -MacAddress 00:1A:79:AA:BB:CC `
+  -AuthMode AUTO `
+  -Username alice `
+  -Password secret
+```
+
+The script extracts Stalker `action=` requests from a HAR capture, redacts domains/tokens/MACs/credentials deterministically, and emits a replay-fixture skeleton in the same format used by `StalkerPortalReplayHarnessTest`.

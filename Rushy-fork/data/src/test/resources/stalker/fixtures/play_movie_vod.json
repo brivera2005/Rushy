@@ -1,0 +1,25 @@
+{
+  "name": "play_movie_vod",
+  "device": {
+    "portalUrl": "https://portal.example.com/c",
+    "macAddress": "00:1A:79:CA:FE:13",
+    "authMode": "AUTO"
+  },
+  "responses": [
+    { "action": "handshake", "headers": { "Set-Cookie": "PHPSESSID=play-movie; Path=/; HttpOnly" }, "body": "{\"js\":{\"token\":\"token-movie-cookie\"}}" },
+    { "action": "get_profile", "body": "{\"js\":{\"id\":\"51\",\"name\":\"Movie Portal\",\"status\":\"1\",\"auth_access\":true}}" },
+    { "action": "get_ordered_list", "body": "{\"js\":{\"total_items\":\"1\",\"max_page_items\":\"50\",\"data\":[{\"id\":\"401\",\"name\":\"Movie Portal\",\"category_id\":\"20\",\"cmd\":\"ffmpeg http://localhost/movie/401_\"}]}}" },
+    { "action": "create_link", "body": "{\"js\":{\"cmd\":\"ffmpeg http://portal.example.com/play/movie.php?stream=401.mkv&play_token=movie401\"}}" }
+  ],
+  "expected": {
+    "authMode": "MAC_ONLY",
+    "portalProfile": "MAG_BASIC",
+    "cookieMode": "CREATE_LINK",
+    "bootstrapEvidence": ["handshake", "get_profile"],
+    "requestOrder": ["handshake", "get_profile", "get_ordered_list", "create_link"],
+    "catalogType": "VOD",
+    "streamKind": "MOVIE",
+    "playbackMode": "PLAY_MOVIE_PORTAL",
+    "resolvedPlaybackUrl": "http://portal.example.com/play/movie.php?stream=401.mkv&play_token=movie401"
+  }
+}

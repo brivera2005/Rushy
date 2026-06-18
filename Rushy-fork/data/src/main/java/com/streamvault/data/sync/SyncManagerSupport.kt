@@ -1,0 +1,208 @@
+package com.streamvault.data.sync
+
+import com.streamvault.data.local.entity.CategoryEntity
+import com.streamvault.data.local.entity.ChannelEntity
+import com.streamvault.data.parser.M3uParser
+import com.streamvault.data.remote.dto.XtreamCategory
+import com.streamvault.data.util.AdultContentClassifier
+import com.streamvault.domain.model.ContentType
+import java.io.InputStream
+import java.security.MessageDigest
+
+internal data class SyncOutcome(
+    val partial: Boolean = false,
+    val warnings: List<String> = emptyList()
+)
+
+internal sealed interface CatalogStrategyResult<out T> {
+    val strategyName: String
+
+    data class Success<T>(
+        override val strategyName: String,
+        val items: List<T>,
+        val warnings: List<String> = emptyList()
+    ) : CatalogStrategyResult<T>
+
+    data class Partial<T>(
+        override val strategyName: String,
+        val items: List<T>,
+        val warnings: List<String>
+    ) : CatalogStrategyResult<T>
+
+    data class Failure(
+        override val strategyName: String,
+        val error: Throwable,
+        val warnings: List<String> = emptyList()
+    ) : CatalogStrategyResult<Nothing>
+
+    data class EmptyValid(
+        override val strategyName: String,
+        val warnings: List<String> = emptyList()
+    ) : CatalogStrategyResult<Nothing>
+}
+
+internal data class XtreamStrategyFeedback(
+    val preferredSegmentedFirst: Boolean = false,
+    val attemptedFullCatalog: Boolean = false,
+    val fullCatalogUnsafe: Boolean = false,
+    val segmentedStressDetected: Boolean = false
+)
+
+internal data class CatalogSyncPayload<T>(
+    val catalogResult: CatalogStrategyResult<T>,
+    val categories: List<CategoryEntity>?,
+    val warnings: List<String> = emptyList(),
+    val strategyFeedback: XtreamStrategyFeedback = XtreamStrategyFeedback(),
+    val stagedSessionId: Long? = null,
+    val stagedAcceptedCount: Int = 0
+)
+
+internal data class LiveCatalogSnapshot(
+    val categories: List<CategoryEntity>?,
+    val channels: List<ChannelEntity>
+)
+
+internal data class SequentialProviderAdaptation(
+    val rememberSequential: Boolean,
+    val healthyStreak: Int
+)
+
+internal sealed interface Attempt<out T> {
+    data class Success<T>(val value: T) : Attempt<T>
+    data class Failure(val error: Exception) : Attempt<Nothing>
+}
+
+internal sealed interface CategoryFetchOutcome<out T> {
+    data class Success<T>(
+        val categoryName: String,
+        val items: List<T>,
+        val rawCount: Int = items.size
+    ) : CategoryFetchOutcome<T>
+    data class Empty(val categoryName: String) : CategoryFetchOutcome<Nothing>
+    data class Failure(val categoryName: String, val error: Throwable) : CategoryFetchOutcome<Nothing>
+}
+
+internal data class TimedCategoryOutcome<T>(
+    val category: XtreamCategory,
+    val outcome: CategoryFetchOutcome<T>,
+    val elapsedMs: Long
+)
+
+internal data class CategoryExecutionPlan<T>(
+    val outcomes: List<TimedCategoryOutcome<T>>,
+    val warnings: List<String> = emptyList()
+)
+
+internal data class M3uImportStats(
+    val header: M3uParser.M3uHeader,
+    val liveCount: Int,
+    val movieCount: Int,
+    val warnings: List<String> = emptyList()
+)
+
+internal data class StreamedPlaylist(
+    val inputStream: InputStream,
+    val contentEncoding: String? = null,
+    val sourceName: String? = null
+)
+
+internal class FallbackCategoryCollector(
+    private val providerId: Long,
+    private val type: ContentType
+) {
+    private val categories = LinkedHashMap<Long, CategoryEntity>()
+
+    fun record(categoryId: Long?, categoryName: String?, isAdult: Boolean) {
+        val resolvedCategoryId = categoryId ?: return
+        val resolvedCategoryName = categoryName?.trim().takeUnless { it.isNullOrEmpty() }
+            ?: "Category $resolvedCategoryId"
+        val candidate = CategoryEntity(
+            categoryId = resolvedCategoryId,
+            name = resolvedCategoryName,
+            parentId = 0,
+            type = type,
+            providerId = providerId,
+            isAdult = isAdult || AdultContentClassifier.isAdultCategoryName(resolvedCategoryName)
+        )
+        val existing = categories[resolvedCategoryId]
+        categories[resolvedCategoryId] = if (existing == null) {
+            candidate
+        } else {
+            existing.copy(
+                name = preferredCategoryName(existing.name, candidate.name, resolvedCategoryId),
+                isAdult = existing.isAdult || candidate.isAdult,
+                isUserProtected = existing.isUserProtected || candidate.isUserProtected
+            )
+        }
+    }
+
+    fun entities(): List<CategoryEntity> = categories.values.toList()
+
+    private fun preferredCategoryName(
+        currentName: String,
+        candidateName: String,
+        categoryId: Long
+    ): String {
+        val placeholderName = "Category $categoryId"
+        return when {
+            currentName == placeholderName && candidateName != placeholderName -> candidateName
+            currentName != placeholderName -> currentName
+            else -> candidateName
+        }
+    }
+}
+
+internal data class StagedCatalogSnapshot(
+    val sessionId: Long?,
+    val acceptedCount: Int,
+    val fallbackCategories: List<CategoryEntity>?
+)
+
+internal class StableLongHasher {
+    private val digest = MessageDigest.getInstance("SHA-256")
+
+    fun hash(input: String): Long {
+        val bytes = digest.digest(input.toByteArray(Charsets.UTF_8))
+        var result = 0L
+        for (i in 0 until 8) {
+            result = (result shl 8) or (bytes[i].toLong() and 0xFF)
+        }
+        return result and Long.MAX_VALUE
+    }
+}
+
+internal class CategoryAccumulator(
+    private val providerId: Long,
+    private val type: ContentType,
+    private val hasher: StableLongHasher
+) {
+    private val categoryIds = LinkedHashMap<String, Long>()
+    val count: Int
+        get() = categoryIds.size
+
+    fun idFor(name: String): Long {
+        return categoryIds.getOrPut(name) { stableId(providerId, type, name, hasher) }
+    }
+
+    fun entities(): List<CategoryEntity> {
+        return categoryIds.map { (name, id) ->
+            CategoryEntity(
+                categoryId = id,
+                name = name,
+                parentId = 0,
+                type = type,
+                providerId = providerId,
+                isAdult = AdultContentClassifier.isAdultCategoryName(name)
+            )
+        }
+    }
+
+    private fun stableId(
+        providerId: Long,
+        type: ContentType,
+        name: String,
+        hasher: StableLongHasher
+    ): Long {
+        return hasher.hash("$providerId/${type.name}/$name").coerceAtLeast(1L)
+    }
+}

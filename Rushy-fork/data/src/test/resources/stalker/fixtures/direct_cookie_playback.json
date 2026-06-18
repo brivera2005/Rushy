@@ -1,0 +1,24 @@
+{
+  "name": "direct_cookie_playback",
+  "device": {
+    "portalUrl": "https://portal.example.com/c",
+    "macAddress": "00:1A:79:CA:FE:11",
+    "authMode": "AUTO",
+    "cookieMode": "PLAYBACK",
+    "playbackBackendHint": "DIRECT"
+  },
+  "responses": [
+    { "action": "handshake", "headers": { "Set-Cookie": "PHPSESSID=direct-cookie; Path=/; HttpOnly" }, "body": "{\"js\":{\"token\":\"token-direct\"}}" },
+    { "action": "get_profile", "body": "{\"js\":{\"id\":\"31\",\"name\":\"Cookie Direct\",\"status\":\"1\",\"auth_access\":true}}" },
+    { "action": "get_all_channels", "body": "{\"js\":{\"data\":[{\"id\":\"300\",\"name\":\"Direct\",\"tv_genre_id\":\"10\",\"cmd\":\"http://edge.example.com/live/direct.m3u8\"}]}}" }
+  ],
+  "expected": {
+    "authMode": "MAC_ONLY",
+    "portalProfile": "MAG_BASIC",
+    "endpointPreference": "SERVER_LOAD",
+    "playbackBackendHint": "DIRECT",
+    "bootstrapEvidence": ["handshake", "get_profile"],
+    "requestOrder": ["handshake", "get_profile", "get_all_channels"],
+    "playbackMode": "DIRECT_URL"
+  }
+}

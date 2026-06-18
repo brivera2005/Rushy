@@ -1,0 +1,152 @@
+name: Android Beta Build
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-beta:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Read app version
+        id: app_version
+        shell: bash
+        run: |
+          VERSION_NAME=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          VERSION_CODE=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BETA_SEQUENCE=$(printf "%06d.%02d" "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ATTEMPT")
+
+          if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
+            echo "Failed to read app version from app/build.gradle.kts"
+            exit 1
+          fi
+
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "beta_sequence=$BETA_SEQUENCE" >> "$GITHUB_OUTPUT"
+          echo "beta_tag=v$VERSION_NAME-beta.$BETA_SEQUENCE" >> "$GITHUB_OUTPUT"
+          echo "apk_name=StreamVault-$VERSION_NAME-beta.$BETA_SEQUENCE.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare optional signing files
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$RELEASE_STORE_PASSWORD" ] && [ -n "$RELEASE_KEY_ALIAS" ] && [ -n "$RELEASE_KEY_PASSWORD" ]; then
+            mkdir -p keystore
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > keystore/release.jks
+            printf '%s\n' \
+              'storeFile=keystore/release.jks' \
+              "storePassword=$RELEASE_STORE_PASSWORD" \
+              "keyAlias=$RELEASE_KEY_ALIAS" \
+              "keyPassword=$RELEASE_KEY_PASSWORD" \
+              > keystore.properties
+            echo "Release signing files prepared for beta."
+          else
+            echo "No signing secrets configured. Building unsigned beta APK."
+          fi
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build beta APK
+        run: ./gradlew --console=plain :app:assembleBeta
+
+      - name: Prepare beta artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          APK_PATH=$(find app/build/outputs/apk/beta -maxdepth 1 -name '*.apk' | head -n 1)
+
+          if [ -z "$APK_PATH" ]; then
+            echo "No beta APK produced."
+            exit 1
+          fi
+
+          cp "$APK_PATH" "dist/${{ steps.app_version.outputs.apk_name }}"
+          cp "$APK_PATH" dist/StreamVault-beta.apk
+
+      - name: Upload beta APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-apk
+          path: |
+            dist/${{ steps.app_version.outputs.apk_name }}
+            dist/StreamVault-beta.apk
+
+  publish-beta:
+    needs: build-beta
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Read app version
+        id: app_version
+        shell: bash
+        run: |
+          VERSION_NAME=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BETA_SEQUENCE=$(printf "%06d.%02d" "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ATTEMPT")
+
+          if [ -z "$VERSION_NAME" ]; then
+            echo "Failed to read app version from app/build.gradle.kts"
+            exit 1
+          fi
+
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "beta_sequence=$BETA_SEQUENCE" >> "$GITHUB_OUTPUT"
+          echo "beta_tag=v$VERSION_NAME-beta.$BETA_SEQUENCE" >> "$GITHUB_OUTPUT"
+
+      - name: Download beta APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: beta-apk
+          path: dist
+
+      - name: Publish GitHub Pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.app_version.outputs.beta_tag }}
+          target_commitish: ${{ github.sha }}
+          name: StreamVault Beta ${{ steps.app_version.outputs.version_name }} build ${{ steps.app_version.outputs.beta_sequence }}
+          body: |
+            Automated beta build from `develop`.
+
+            Beta sequence: `${{ steps.app_version.outputs.beta_sequence }}`
+            Commit: `${{ github.sha }}`
+          files: |
+            dist/*.apk
+          prerelease: true
+          make_latest: false
+          generate_release_notes: false

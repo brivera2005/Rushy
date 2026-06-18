@@ -1,0 +1,87 @@
+# Gradle
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Android
+local.properties
+.DS_Store
+captures/
+.externalNativeBuild
+.cxx
+local.properties
+*.local.properties
+keystore.properties
+secrets.properties
+secret.properties
+.env
+.env.*
+.openai*
+keystore/
+release-signing-info.local.txt
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+
+# Build output
+build_output_*.txt
+
+# Generated sources
+domain/bin/
+
+# Tooling and crash logs
+.pi/
+.kotlin/
+hs_err_pid*.log
+gradle_build.log
+ksp.log
+__pycache__/
+*.pyc
+
+# Local scratch outputs
+capture.txt
+out.txt
+localization_audit.txt
+missing_en.json
+missing_en.tsv
+missing_keys.txt
+docs/review/
+graphify-out/
+tmp/
+tmp/*.txt
+tmp/*_HEAD.kt
+tmp/gha-artifact-inspect/
+.tmp-inspect/
+translations/
+releases/*.apk
+
+# AI tooling
+.claude/
+.opencode/
+
+# Dev handoff notes
+docs/*-handoff.md
+docs/*-plan.md
+docs/*-baseline.md
+
+# Local dev credentials (Rushy fork)
+app/src/main/java/com/streamvault/app/DefaultCredentials.kt
+
+# Smoke scripts
+tools/smoke_*.ps1
+
+# Build/test logs
+final_narrow_*.log
+gradle_*_test*.log
+gradle_*_rerun.log

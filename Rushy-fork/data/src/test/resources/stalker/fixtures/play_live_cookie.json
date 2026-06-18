@@ -1,0 +1,23 @@
+{
+  "name": "play_live_cookie",
+  "device": {
+    "portalUrl": "https://portal.example.com/c",
+    "macAddress": "00:1A:79:CA:FE:12",
+    "authMode": "AUTO"
+  },
+  "responses": [
+    { "action": "handshake", "headers": { "Set-Cookie": "PHPSESSID=play-live; Path=/; HttpOnly" }, "body": "{\"js\":{\"token\":\"token-live-cookie\"}}" },
+    { "action": "get_profile", "body": "{\"js\":{\"id\":\"41\",\"name\":\"Play Live\",\"status\":\"1\",\"auth_access\":true}}" },
+    { "action": "get_all_channels", "body": "{\"js\":{\"data\":[{\"id\":\"301\",\"name\":\"Portal Live\",\"tv_genre_id\":\"10\",\"cmd\":\"ffmpeg http://localhost/ch/301_\",\"use_http_tmp_link\":\"1\",\"nginx_secure_link\":\"1\"}]}}" },
+    { "action": "create_link", "body": "{\"js\":{\"cmd\":\"ffmpeg http://portal.example.com/play/live.php?stream=301&play_token=live301\"}}" }
+  ],
+  "expected": {
+    "authMode": "MAC_ONLY",
+    "portalProfile": "MAG_BASIC",
+    "cookieMode": "CREATE_LINK",
+    "bootstrapEvidence": ["handshake", "get_profile"],
+    "requestOrder": ["handshake", "get_profile", "get_all_channels", "create_link"],
+    "playbackMode": "PLAY_LIVE_PORTAL",
+    "resolvedPlaybackUrl": "http://portal.example.com/play/live.php?stream=301&play_token=live301"
+  }
+}

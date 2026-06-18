@@ -1,0 +1,22 @@
+{
+  "name": "nginx_temp_link",
+  "device": {
+    "portalUrl": "https://portal.example.com/c",
+    "macAddress": "00:1A:79:12:34:56",
+    "authMode": "AUTO"
+  },
+  "responses": [
+    { "action": "handshake", "body": "{\"js\":{\"token\":\"token-nginx\"}}" },
+    { "action": "get_profile", "body": "{\"js\":{\"id\":\"55\",\"name\":\"TempLink\",\"status\":\"1\",\"auth_access\":true}}" },
+    { "action": "get_all_channels", "body": "{\"js\":{\"data\":[{\"id\":\"100\",\"name\":\"News\",\"tv_genre_id\":\"10\",\"cmd\":\"ffmpeg http://localhost/ch/100_\",\"use_http_tmp_link\":\"1\",\"nginx_secure_link\":\"1\"}]}}" },
+    { "action": "create_link", "body": "{\"js\":{\"cmd\":\"ffmpeg http://edge.example.com/play/live.php?stream=100&play_token=abc\"}}" }
+  ],
+  "expected": {
+    "authMode": "MAC_ONLY",
+    "portalProfile": "MAG_BASIC",
+    "bootstrapEvidence": ["handshake", "get_profile"],
+    "requestOrder": ["handshake", "get_profile", "get_all_channels", "create_link"],
+    "playbackMode": "PLAY_LIVE_PORTAL",
+    "resolvedPlaybackUrl": "http://edge.example.com/play/live.php?stream=100&play_token=abc"
+  }
+}

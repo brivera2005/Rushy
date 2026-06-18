@@ -67,6 +67,14 @@ enum class ProviderType {
     PLEX
 }
 
+fun ProviderType.isLiveIptvProvider(): Boolean = when (this) {
+    ProviderType.XTREAM_CODES,
+    ProviderType.M3U,
+    ProviderType.STALKER_PORTAL -> true
+    ProviderType.JELLYFIN,
+    ProviderType.PLEX -> false
+}
+
 enum class ProviderEpgSyncMode {
     UPFRONT,
     BACKGROUND,

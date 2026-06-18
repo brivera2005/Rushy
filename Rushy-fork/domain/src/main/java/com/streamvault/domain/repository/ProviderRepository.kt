@@ -17,7 +17,10 @@ data class LiveStreamProgramRequest(
 interface ProviderRepository {
     fun getProviders(): Flow<List<Provider>>
     fun getActiveProvider(): Flow<Provider?>
+    fun getActiveBackupProvider(): Flow<Provider?>
     suspend fun getProvider(id: Long): Provider?
+    /** Restores live-provider active flags when providers exist but none are marked active. */
+    suspend fun reconcileActiveProviders()
     suspend fun addProvider(provider: Provider): Result<Long>
     suspend fun updateProvider(provider: Provider): Result<Unit>
     suspend fun deleteProvider(id: Long): Result<Unit>

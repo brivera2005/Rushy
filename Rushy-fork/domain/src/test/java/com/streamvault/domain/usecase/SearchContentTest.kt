@@ -197,6 +197,8 @@ class SearchContentTest {
 private class FakeProviderRepository : ProviderRepository {
     override fun getProviders() = flowOf(emptyList())
     override fun getActiveProvider() = flowOf(null)
+    override fun getActiveBackupProvider() = flowOf(null)
+    override suspend fun reconcileActiveProviders() = Unit
     override suspend fun getProvider(id: Long) = null
     override suspend fun addProvider(provider: com.streamvault.domain.model.Provider) =
         com.streamvault.domain.model.Result.error("unsupported")

@@ -80,10 +80,14 @@ class WelcomeViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            maybeSeedDevProvider()
+            _hasProviders.value = providerRepository.getProviders().first().isNotEmpty()
             providerRepository.getProviders()
                 .map { it.isNotEmpty() }
                 .collect { _hasProviders.value = it }
+        }
+        viewModelScope.launch {
+            providerRepository.reconcileActiveProviders()
+            maybeSeedDevProvider()
         }
         viewModelScope.launch {
             _hasProviders

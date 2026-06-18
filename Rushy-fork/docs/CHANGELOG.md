@@ -2,6 +2,13 @@
 
 All notable product changes are recorded in this document.
 
+## [2.3.1] - 2026-06-18
+
+### Fixed
+
+- Fixed dual-provider startup so Home and Dashboard recognize synced Xtream/M3U live providers even when Plex backup is active or live `is_active` flags were cleared after v2.3.0.
+- Restores live provider activation on startup and skips add-source empty states whenever any provider exists in the database.
+
 ## [1.0.15] - 2026-06-13
 
 ### Fixed

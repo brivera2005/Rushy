@@ -188,6 +188,7 @@ class HomeViewModel @Inject constructor(
                     is ActiveLiveSource.ProviderSource -> {
                         val provider = activeProvider?.takeIf { it.id == activeSource.providerId }
                             ?: providerRepository.getProvider(activeSource.providerId)
+                            ?: activeProvider
                             ?: return@collectLatest
                         parentalControlManager.clearUnlockedCategories(provider.id)
                         combinedCategoriesById = emptyMap()

@@ -639,6 +639,10 @@ private class FakeProviderRepository : ProviderRepository {
 
     override fun getActiveProvider(): Flow<Provider?> = flowOf(null)
 
+    override fun getActiveBackupProvider(): Flow<Provider?> = flowOf(null)
+
+    override suspend fun reconcileActiveProviders() = Unit
+
     override suspend fun getProvider(id: Long): Provider? = null
 
     override suspend fun addProvider(provider: Provider): Result<Long> = error("Not used in test")

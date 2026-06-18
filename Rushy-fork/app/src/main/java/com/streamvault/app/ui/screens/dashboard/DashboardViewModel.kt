@@ -18,6 +18,7 @@ import com.streamvault.domain.model.PlaybackHistory
 import com.streamvault.domain.model.Provider
 import com.streamvault.domain.model.ProviderStatus
 import com.streamvault.domain.model.ProviderType
+import com.streamvault.domain.model.isLiveIptvProvider
 import com.streamvault.domain.model.Series
 import com.streamvault.domain.model.SyncState
 import com.streamvault.domain.model.VirtualCategoryIds
@@ -108,48 +109,79 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 combinedM3uRepository.getActiveLiveSource(),
-                providerRepository.getActiveProvider()
-            ) { activeSource, activeProvider ->
-                Pair(activeSource ?: activeProvider?.id?.let { ActiveLiveSource.ProviderSource(it) }, activeProvider)
+                providerRepository.getActiveProvider(),
+                providerRepository.getProviders(),
+            ) { activeSource, activeProvider, allProviders ->
+                Triple(activeSource, activeProvider, allProviders)
             }
                 .distinctUntilChanged { old, new ->
-                    old.first == new.first && old.second?.id == new.second?.id
+                    old.first == new.first &&
+                        old.second?.id == new.second?.id &&
+                        old.third.map { it.id } == new.third.map { it.id }
                 }
-                .flatMapLatest { (activeSource, activeProvider) ->
+                .flatMapLatest { (activeSource, activeProvider, allProviders) ->
                     flow {
-                        if (activeSource == null && activeProvider == null) {
+                        val fallbackLiveProvider = allProviders.firstOrNull { it.type.isLiveIptvProvider() }
+                        val resolvedActiveProvider = activeProvider
+                            ?: fallbackLiveProvider
+                            ?: allProviders.firstOrNull()
+                        var resolvedSource = activeSource
+                            ?: resolvedActiveProvider?.id?.let { ActiveLiveSource.ProviderSource(it) }
+
+                        if (resolvedSource == null && resolvedActiveProvider == null) {
                             emit(DashboardUiState(isLoading = false))
                             return@flow
                         }
 
-                        when (activeSource) {
+                        when (resolvedSource) {
                             is ActiveLiveSource.ProviderSource -> {
-                                val provider = activeProvider?.takeIf { it.id == activeSource.providerId }
-                                    ?: providerRepository.getProvider(activeSource.providerId)
+                                val provider = resolvedActiveProvider?.takeIf { it.id == resolvedSource.providerId }
+                                    ?: providerRepository.getProvider(resolvedSource.providerId)
+                                    ?: fallbackLiveProvider
+                                    ?: resolvedActiveProvider
                                     ?: run {
-                                        emit(DashboardUiState(isLoading = false))
+                                        emit(DashboardUiState(isLoading = allProviders.isNotEmpty()))
                                         return@flow
                                     }
                                 emitAll(observeDashboard(provider, listOf(provider.id), combinedProfileId = null))
                             }
 
                             is ActiveLiveSource.CombinedM3uSource -> {
-                                val liveProviderIds = combinedM3uRepository.getProfile(activeSource.profileId)
+                                val liveProviderIds = combinedM3uRepository.getProfile(resolvedSource.profileId)
                                     ?.members
                                     .orEmpty()
                                     .filter { it.enabled }
                                     .map { it.providerId }
                                     .distinct()
-                                val provider = activeProvider?.takeIf { it.id in liveProviderIds }
+                                val provider = resolvedActiveProvider?.takeIf { it.id in liveProviderIds }
                                     ?: liveProviderIds.firstOrNull()?.let { providerRepository.getProvider(it) }
+                                    ?: fallbackLiveProvider
+                                    ?: resolvedActiveProvider
                                     ?: run {
-                                        emit(DashboardUiState(isLoading = false, currentCombinedProfileId = activeSource.profileId))
+                                        emit(
+                                            DashboardUiState(
+                                                isLoading = allProviders.isNotEmpty(),
+                                                currentCombinedProfileId = resolvedSource.profileId
+                                            )
+                                        )
                                         return@flow
                                     }
-                                emitAll(observeDashboard(provider, liveProviderIds, combinedProfileId = activeSource.profileId))
+                                emitAll(
+                                    observeDashboard(
+                                        provider,
+                                        liveProviderIds.ifEmpty { listOf(provider.id) },
+                                        combinedProfileId = resolvedSource.profileId
+                                    )
+                                )
                             }
 
-                            null -> emit(DashboardUiState(isLoading = false))
+                            null -> {
+                                val provider = resolvedActiveProvider ?: run {
+                                    emit(DashboardUiState(isLoading = allProviders.isNotEmpty()))
+                                    return@flow
+                                }
+                                emitAll(observeDashboard(provider, listOf(provider.id), combinedProfileId = null))
+                            }
                         }
                     }
                 }

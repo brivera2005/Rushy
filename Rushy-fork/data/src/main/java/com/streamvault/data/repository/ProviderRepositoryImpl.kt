@@ -24,6 +24,7 @@ import com.streamvault.data.util.ProviderInputSanitizer
 import com.streamvault.data.util.UrlSecurityPolicy
 import com.streamvault.domain.manager.ProviderCredentials
 import com.streamvault.domain.model.*
+import com.streamvault.domain.model.isLiveIptvProvider
 import com.streamvault.domain.provider.IptvProvider
 import com.streamvault.domain.repository.LiveStreamProgramRequest
 import com.streamvault.domain.repository.ProviderRepository
@@ -75,7 +76,26 @@ class ProviderRepositoryImpl @Inject constructor(
         providerDao.getAll().map { entities -> entities.map { it.toPublicDomain() } }
 
     override fun getActiveProvider(): Flow<Provider?> =
-        providerDao.getActive().map { it?.toPublicDomain() }
+        providerDao.getAll().map { entities ->
+            resolveActiveLiveProvider(entities)?.toPublicDomain()
+        }
+
+    override fun getActiveBackupProvider(): Flow<Provider?> =
+        providerDao.getActiveBackup().map { it?.toPublicDomain() }
+
+    override suspend fun reconcileActiveProviders() {
+        val entities = providerDao.getAllSync()
+        if (entities.isEmpty()) return
+
+        val resolvedLive = resolveActiveLiveProvider(entities)
+            ?.takeIf { it.type.isLiveIptvProvider() }
+            ?: return
+
+        val activeLiveIds = entities.filter { it.isActive && it.type.isLiveIptvProvider() }.map { it.id }
+        if (resolvedLive.id in activeLiveIds) return
+
+        providerDao.setActive(resolvedLive.id)
+    }
 
     override suspend fun getProvider(id: Long): Provider? =
         providerDao.getById(id)?.toPublicDomain()

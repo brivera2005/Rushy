@@ -16,6 +16,7 @@ import com.streamvault.app.bootstrap.RushyCredentialsBootstrap
 import com.streamvault.data.remote.jellyfin.JellyfinImageAuthInterceptor
 import com.streamvault.data.preferences.PreferencesRepository
 import com.streamvault.domain.model.Result
+import com.streamvault.domain.repository.ProviderRepository
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,6 +57,9 @@ class StreamVaultApp : Application(), SingletonImageLoader.Factory {
     @Inject
     lateinit var rushyCredentialsBootstrap: RushyCredentialsBootstrap
 
+    @Inject
+    lateinit var providerRepository: ProviderRepository
+
     private val imageOkHttpClient: OkHttpClient by lazy {
         okHttpClient.newBuilder()
             .addInterceptor(jellyfinImageAuthInterceptor)
@@ -67,6 +71,7 @@ class StreamVaultApp : Application(), SingletonImageLoader.Factory {
         CrashReportStore.install(this)
         runtimeDiagnosticsManager.start()
         applicationScope.launch {
+            providerRepository.reconcileActiveProviders()
             rushyCredentialsBootstrap.ensureDefaultCredentialsIfNeeded()
         }
         applicationScope.launch {

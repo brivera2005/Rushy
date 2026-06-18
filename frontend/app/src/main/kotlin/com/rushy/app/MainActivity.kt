@@ -9,6 +9,7 @@ import android.app.Activity
 import android.content.Intent
 
 import android.os.Bundle
+import android.view.KeyEvent
 
 import android.speech.RecognizerIntent
 
@@ -51,7 +52,11 @@ import androidx.compose.runtime.Composable
 
 import androidx.compose.runtime.CompositionLocalProvider
 
+import androidx.compose.runtime.DisposableEffect
+
 import androidx.compose.runtime.LaunchedEffect
+
+import androidx.compose.runtime.SideEffect
 
 import androidx.compose.runtime.getValue
 
@@ -87,6 +92,10 @@ import androidx.tv.material3.Surface
 
 import androidx.tv.material3.Text
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
+
 import kotlinx.coroutines.CoroutineExceptionHandler
 
 import kotlinx.coroutines.Dispatchers
@@ -106,6 +115,18 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
 
     private var onSpeechResultReceived: ((String) -> Unit)? = null
+
+    @Volatile
+    private var blockKeysDuringForceUpdate: Boolean = false
+
+    fun setForceUpdateKeyBlock(block: Boolean) {
+        blockKeysDuringForceUpdate = block
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (blockKeysDuringForceUpdate) return true
+        return super.dispatchKeyEvent(event)
+    }
 
 
 
@@ -309,9 +330,9 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
     var pendingUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
 
-    var showUpdateDialog by remember { mutableStateOf(false) }
-
     var isForceUpdating by remember { mutableStateOf(false) }
+
+    var needsInstallPermission by remember { mutableStateOf(false) }
 
     var forceUpdateStatus by remember { mutableStateOf<String?>(null) }
 
@@ -355,15 +376,15 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
         if (activity != null && !updateManager.canInstallPackages()) {
 
-            forceUpdateStatus = "Install permission required — open Settings to allow."
+            needsInstallPermission = true
 
-            updateManager.requestInstallPermission(activity)
-
-            isForceUpdating = false
+            forceUpdateStatus = null
 
             return
 
         }
+
+        needsInstallPermission = false
 
         isDownloadingUpdate = true
 
@@ -389,8 +410,6 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 downloadProgress = -1
 
-                isForceUpdating = false
-
             }
 
             is DownloadResult.Error -> {
@@ -399,11 +418,11 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 downloadProgress = -1
 
-                isForceUpdating = false
+                forceUpdateStatus = "${download.message} — retrying..."
 
-                forceUpdateStatus = download.message
+                delay(3000)
 
-                Toast.makeText(context, download.message, Toast.LENGTH_LONG).show()
+                performUpdate(updateInfo)
 
             }
 
@@ -413,25 +432,35 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-    fun handleUpdateCheckResult(result: UpdateCheckResult, forceInstall: Boolean) {
+    fun beginForceUpdate(updateInfo: UpdateInfo) {
+
+        pendingUpdate = updateInfo
+
+        isForceUpdating = true
+
+        needsInstallPermission = false
+
+        forceUpdateStatus = null
+
+        scope.launch { performUpdate(updateInfo) }
+
+    }
+
+
+
+    fun handleUpdateCheckResult(result: UpdateCheckResult) {
 
         when (result) {
 
             is UpdateCheckResult.UpdateAvailable -> {
 
-                pendingUpdate = result.info
+                if (pendingUpdate?.versionCode != result.info.versionCode) {
 
-                if (forceInstall) {
+                    beginForceUpdate(result.info)
 
-                    showUpdateDialog = false
+                } else if (!isForceUpdating) {
 
-                    isForceUpdating = true
-
-                    scope.launch { performUpdate(result.info) }
-
-                } else {
-
-                    showUpdateDialog = true
+                    beginForceUpdate(result.info)
 
                 }
 
@@ -439,25 +468,17 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
             is UpdateCheckResult.UpToDate -> {
 
-                pendingUpdate = null
+                if (!isForceUpdating) {
 
-                showUpdateDialog = false
+                    pendingUpdate = null
 
-                isForceUpdating = false
-
-            }
-
-            is UpdateCheckResult.Error -> {
-
-                isForceUpdating = false
-
-                if (!forceInstall) {
-
-                    Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+                    needsInstallPermission = false
 
                 }
 
             }
+
+            is UpdateCheckResult.Error -> Unit
 
         }
 
@@ -465,9 +486,9 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-    fun checkForUpdates(forceInstall: Boolean = true) {
+    fun checkForUpdates() {
 
-        if (isCheckingUpdate) return
+        if (isCheckingUpdate || isForceUpdating) return
 
         scope.launch {
 
@@ -477,7 +498,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
             isCheckingUpdate = false
 
-            handleUpdateCheckResult(result, forceInstall = forceInstall)
+            handleUpdateCheckResult(result)
 
         }
 
@@ -597,7 +618,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
                 }
 
                 if (showRefreshIndicator) {
-                    checkForUpdates(forceInstall = true)
+                    checkForUpdates()
                 }
 
             }
@@ -611,6 +632,96 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
     fun playItem(item: MediaItem) {
 
         playback.play(item)
+
+    }
+
+
+
+    LaunchedEffect(Unit) {
+
+        if (updatePrefs.checkOnStartup) {
+
+            checkForUpdates()
+
+        }
+
+    }
+
+
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+
+        val observer = LifecycleEventObserver { _, event ->
+
+            if (event == Lifecycle.Event.ON_RESUME && !isForceUpdating) {
+
+                checkForUpdates()
+
+            }
+
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+
+    }
+
+
+
+    SideEffect {
+
+        (activity as? MainActivity)?.setForceUpdateKeyBlock(
+
+            isForceUpdating && pendingUpdate != null && !needsInstallPermission,
+
+        )
+
+    }
+
+
+
+    if (isForceUpdating && pendingUpdate != null) {
+
+        ForceUpdateScreen(
+
+            updateInfo = pendingUpdate!!,
+
+            downloadProgress = downloadProgress,
+
+            statusMessage = forceUpdateStatus,
+
+            needsInstallPermission = needsInstallPermission,
+
+            onOpenSettings = {
+
+                if (activity != null) {
+
+                    updateManager.requestInstallPermission(activity)
+
+                    scope.launch {
+
+                        delay(1500)
+
+                        if (updateManager.canInstallPackages()) {
+
+                            needsInstallPermission = false
+
+                            performUpdate(pendingUpdate!!)
+
+                        }
+
+                    }
+
+                }
+
+            },
+
+        )
+
+        return
 
     }
 
@@ -677,14 +788,6 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
                 delay(400)
 
                 loadCatalog(liveOnly = true)
-
-            }
-
-            if (updatePrefs.checkOnStartup) {
-
-                delay(1200)
-
-                checkForUpdates(forceInstall = true)
 
             }
 
@@ -770,46 +873,6 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
 
-    if (isForceUpdating && pendingUpdate != null) {
-
-        ForceUpdateScreen(
-
-            updateInfo = pendingUpdate!!,
-
-            downloadProgress = downloadProgress,
-
-            statusMessage = forceUpdateStatus,
-
-        )
-
-        return
-
-    }
-
-
-
-    if (showUpdateDialog && pendingUpdate != null) {
-
-        UpdateAvailableDialog(
-
-            updateInfo = pendingUpdate!!,
-
-            isDownloading = isDownloadingUpdate,
-
-            downloadProgress = downloadProgress,
-
-            onUpdateNow = { scope.launch { performUpdate(pendingUpdate!!) } },
-
-            onLater = { showUpdateDialog = false },
-
-        )
-
-        return
-
-    }
-
-
-
     Box(modifier = Modifier.fillMaxSize().background(ThemeColors.DarkBackground)) {
 
         Row(modifier = Modifier.fillMaxSize()) {
@@ -819,8 +882,6 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
                 current = currentScreen,
 
                 onNavigate = { currentScreen = it },
-
-                settingsHasUpdate = pendingUpdate != null,
 
             )
 
@@ -850,6 +911,16 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                 Column {
 
+                    Text(
+
+                        text = "v${BuildConfig.VERSION_NAME}",
+
+                        style = MaterialTheme.typography.labelMedium,
+
+                        color = ThemeColors.TextMuted,
+
+                    )
+
                     if (credentials.isDemoMode) {
 
                         Text(
@@ -869,36 +940,6 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                    pendingUpdate?.let { update ->
-
-                        Button(
-
-                            onClick = {
-
-                                isForceUpdating = true
-
-                                scope.launch { performUpdate(update) }
-
-                            },
-
-                            modifier = Modifier.height(48.dp),
-
-                        ) {
-
-                            Text(
-
-                                text = "⬆ Update v${update.versionName}",
-
-                                color = ThemeColors.TextPrimary,
-
-                                style = MaterialTheme.typography.titleSmall,
-
-                            )
-
-                        }
-
-                    }
 
                     Button(onClick = { loadCatalog(showRefreshIndicator = true) }, enabled = !isRefreshing) {
 
@@ -1108,19 +1149,21 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                         onResync = { loadCatalog(showRefreshIndicator = true) },
 
-                        pendingUpdate = pendingUpdate,
-
                         onUpdateChecked = { result ->
 
-                            handleUpdateCheckResult(result, forceInstall = false)
+                            when (result) {
 
-                        },
+                                is UpdateCheckResult.UpdateAvailable -> {
 
-                        onStartUpdate = { update ->
+                                    beginForceUpdate(result.info)
 
-                            isForceUpdating = true
+                                }
 
-                            scope.launch { performUpdate(update) }
+                                is UpdateCheckResult.UpToDate -> Unit
+
+                                is UpdateCheckResult.Error -> Unit
+
+                            }
 
                         },
 

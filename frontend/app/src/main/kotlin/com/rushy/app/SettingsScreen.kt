@@ -32,9 +32,7 @@ fun SettingsScreen(
     playerSettings: PlayerSettings,
     credentials: CredentialStore,
     onResync: () -> Unit,
-    pendingUpdate: UpdateInfo? = null,
     onUpdateChecked: (UpdateCheckResult) -> Unit = {},
-    onStartUpdate: (UpdateInfo) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -64,7 +62,6 @@ fun SettingsScreen(
         )
 
         UpdatesSection(
-            pendingUpdate = pendingUpdate,
             autoUpdate = autoUpdate,
             checkOnStartup = checkOnStartup,
             isChecking = isChecking,
@@ -87,15 +84,14 @@ fun SettingsScreen(
                     isChecking = false
                     onUpdateChecked(result)
                     updateStatus = when (result) {
-                        is UpdateCheckResult.UpToDate -> "You are on the latest version."
+                        is UpdateCheckResult.UpToDate ->
+                            "You are on the latest version (v${BuildConfig.VERSION_NAME})."
                         is UpdateCheckResult.UpdateAvailable ->
-                            "Update available: v${result.info.versionName} (build ${result.info.versionCode})"
+                            "Update found: v${result.info.versionName} — installing automatically..."
                         is UpdateCheckResult.Error -> result.message
                     }
-                    Toast.makeText(context, updateStatus, Toast.LENGTH_SHORT).show()
                 }
             },
-            onStartUpdate = onStartUpdate,
             onRequestInstallPermission = {
                 if (activity != null) {
                     updateManager.requestInstallPermission(activity)
@@ -455,7 +451,6 @@ private fun SettingsTextField(
 
 @Composable
 private fun UpdatesSection(
-    pendingUpdate: UpdateInfo?,
     autoUpdate: Boolean,
     checkOnStartup: Boolean,
     isChecking: Boolean,
@@ -465,7 +460,6 @@ private fun UpdatesSection(
     onAutoUpdateToggle: () -> Unit,
     onCheckOnStartupToggle: () -> Unit,
     onCheckForUpdates: () -> Unit,
-    onStartUpdate: (UpdateInfo) -> Unit,
     onRequestInstallPermission: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -475,7 +469,7 @@ private fun UpdatesSection(
             color = ThemeColors.TextPrimary,
         )
         Text(
-            text = "Current version: ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
+            text = "Installed: v${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
             color = ThemeColors.TextPrimary.copy(alpha = 0.85f),
         )
         Text(
@@ -483,19 +477,6 @@ private fun UpdatesSection(
             color = ThemeColors.TextPrimary.copy(alpha = 0.65f),
             style = MaterialTheme.typography.bodySmall,
         )
-
-        pendingUpdate?.let { update ->
-            Text(
-                text = "New version ready: v${update.versionName} (build ${update.versionCode})",
-                color = ThemeColors.EmeraldAccent,
-            )
-            Button(
-                onClick = { onStartUpdate(update) },
-                modifier = Modifier.border(2.dp, ThemeColors.EmeraldAccent, MaterialTheme.shapes.small),
-            ) {
-                Text("Update Now", color = ThemeColors.TextPrimary)
-            }
-        }
 
         Button(onClick = onCheckForUpdates, enabled = !isChecking) {
             Text(if (isChecking) "Checking..." else "Check for Updates")

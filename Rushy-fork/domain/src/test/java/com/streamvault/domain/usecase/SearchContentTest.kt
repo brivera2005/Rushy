@@ -206,6 +206,7 @@ private class FakeProviderRepository : ProviderRepository {
     override suspend fun getAllProviderCredentials() = emptyList<com.streamvault.domain.manager.ProviderCredentials>()
     override suspend fun updateProviderPassword(serverUrl: String, username: String, cleartextPassword: String) = false
     override suspend fun setActiveProvider(id: Long) = com.streamvault.domain.model.Result.error("unsupported")
+    override suspend fun setBackupProvider(id: Long) = com.streamvault.domain.model.Result.error("unsupported")
     override suspend fun loginXtream(
         serverUrl: String,
         username: String,

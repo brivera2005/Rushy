@@ -79,17 +79,23 @@ internal fun LazyListScope.providerSection(
                 contentPadding = PaddingValues(bottom = 14.dp)
             ) {
                 items(uiState.providers, key = { it.id }) { provider ->
+                    val isLiveActive = provider.id == uiState.activeProviderId
+                    val isBackupActive = provider.type == ProviderType.PLEX && provider.isActive
                     ProviderSelectorTab(
                         provider = provider,
                         isSelected = provider.id == selectedProvider.id,
-                        isActive = provider.id == uiState.activeProviderId,
+                        isActive = isLiveActive,
+                        isBackupActive = isBackupActive,
                         onClick = { selectedProviderId = provider.id }
                     )
                 }
             }
+            val isLiveActive = selectedProvider.id == uiState.activeProviderId
+            val isBackupActive = selectedProvider.type == ProviderType.PLEX && selectedProvider.isActive
             ProviderSettingsCard(
                 provider = selectedProvider,
-                isActive = selectedProvider.id == uiState.activeProviderId,
+                isActive = isLiveActive,
+                isBackupActive = isBackupActive,
                 isSyncing = uiState.isSyncing,
                 xtreamLiveOnboardingPhase = uiState.xtreamLiveOnboardingPhaseByProvider[selectedProvider.id],
                 xtreamLiveOnboarding = uiState.xtreamLiveOnboardingByProvider[selectedProvider.id],
@@ -161,6 +167,7 @@ internal fun LazyListScope.providerSection(
     plexBackupSettingsSection(
         plexCredentials = plexCredentials,
         plexClient = plexClient,
+        onSyncBackup = viewModel::syncPlexBackupLibrary,
     )
 
     item {

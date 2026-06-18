@@ -42,6 +42,7 @@ import kotlinx.coroutines.withContext
 internal fun LazyListScope.plexBackupSettingsSection(
     plexCredentials: PlexCredentialStore,
     plexClient: PlexClient,
+    onSyncBackup: (serverUrl: String, token: String) -> Unit,
 ) {
     item {
         Spacer(modifier = Modifier.height(8.dp))
@@ -50,6 +51,7 @@ internal fun LazyListScope.plexBackupSettingsSection(
         PlexBackupSettingsCard(
             plexCredentials = plexCredentials,
             plexClient = plexClient,
+            onSyncBackup = onSyncBackup,
         )
     }
 }
@@ -58,6 +60,7 @@ internal fun LazyListScope.plexBackupSettingsSection(
 private fun PlexBackupSettingsCard(
     plexCredentials: PlexCredentialStore,
     plexClient: PlexClient,
+    onSyncBackup: (serverUrl: String, token: String) -> Unit,
 ) {
     var serverUrl by remember { mutableStateOf(plexCredentials.serverUrl) }
     var token by remember { mutableStateOf(plexCredentials.token) }
@@ -119,7 +122,11 @@ private fun PlexBackupSettingsCard(
                 onClick = {
                     plexCredentials.save(serverUrl, token)
                     plexCredentials.backupEnabled = backupEnabled
-                    statusMessage = context.getString(R.string.rushy_plex_saved)
+                    if (backupEnabled && serverUrl.isNotBlank() && token.isNotBlank()) {
+                        onSyncBackup(serverUrl, token)
+                    } else {
+                        statusMessage = context.getString(R.string.rushy_plex_saved)
+                    }
                 },
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
                 colors = ClickableSurfaceDefaults.colors(

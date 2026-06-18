@@ -42,6 +42,7 @@ interface ProviderRepository {
     ): Boolean
 
     suspend fun setActiveProvider(id: Long): Result<Unit>
+    suspend fun setBackupProvider(id: Long): Result<Unit>
     suspend fun loginXtream(serverUrl: String, username: String, password: String, name: String, httpUserAgent: String = "", httpHeaders: String = "", xtreamFastSyncEnabled: Boolean, epgSyncMode: ProviderEpgSyncMode = ProviderEpgSyncMode.BACKGROUND, xtreamLiveSyncMode: ProviderXtreamLiveSyncMode = ProviderXtreamLiveSyncMode.AUTO, onProgress: ((String) -> Unit)? = null, id: Long? = null): Result<Provider>
     suspend fun validateM3u(url: String, name: String, httpUserAgent: String = "", httpHeaders: String = "", epgSyncMode: ProviderEpgSyncMode = ProviderEpgSyncMode.BACKGROUND, m3uVodClassificationEnabled: Boolean = false, onProgress: ((String) -> Unit)? = null, id: Long? = null): Result<Provider>
     suspend fun loginStalker(

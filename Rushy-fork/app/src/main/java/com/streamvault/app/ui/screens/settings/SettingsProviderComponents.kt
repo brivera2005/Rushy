@@ -59,6 +59,7 @@ import java.util.Locale
 internal fun ProviderSettingsCard(
     provider: Provider,
     isActive: Boolean,
+    isBackupActive: Boolean = false,
     isSyncing: Boolean,
     xtreamLiveOnboardingPhase: String?,
     xtreamLiveOnboarding: XtreamLiveOnboardingUiModel?,
@@ -84,17 +85,18 @@ internal fun ProviderSettingsCard(
     } else {
         null
     }
+    val cardHighlighted = isActive || isBackupActive
     // Use Column layout - provider info + buttons below as separate focusable items
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = if (isActive) SurfaceHighlight else SurfaceElevated,
+                color = if (cardHighlighted) SurfaceHighlight else SurfaceElevated,
                 shape = RoundedCornerShape(8.dp)
             )
             .border(
-                width = if (isActive) 2.dp else 0.dp,
-                color = if (isActive) Primary else Color.Transparent,
+                width = if (cardHighlighted) 2.dp else 0.dp,
+                color = if (isActive) Primary else if (isBackupActive) Secondary else Color.Transparent,
                 shape = RoundedCornerShape(8.dp)
             )
             .padding(16.dp),
@@ -127,6 +129,16 @@ internal fun ProviderSettingsCard(
                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                     modifier = Modifier
                         .background(Primary.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            } else if (isBackupActive) {
+                Text(
+                    text = stringResource(R.string.settings_backup_active),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Secondary,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier
+                        .background(Secondary.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
@@ -225,6 +237,8 @@ internal fun ProviderSettingsCard(
 
         ProviderActionButtons(
             isActive = isActive,
+            isBackupActive = isBackupActive,
+            isPlexBackup = provider.type == ProviderType.PLEX,
             isSyncing = isSyncing,
             liveOnboardingIncomplete = liveOnboardingIncomplete,
             onConnect = onConnect,

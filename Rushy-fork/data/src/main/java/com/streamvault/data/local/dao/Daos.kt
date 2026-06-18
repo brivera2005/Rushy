@@ -27,8 +27,19 @@ abstract class ProviderDao {
     @Query("SELECT * FROM providers ORDER BY created_at DESC")
     abstract suspend fun getAllSync(): List<ProviderEntity>
 
-    @Query("SELECT * FROM providers WHERE is_active = 1 LIMIT 1")
+    /** Primary live provider — prefers active non-Plex; falls back to Plex when it is the only active provider. */
+    @Query(
+        """
+        SELECT * FROM providers
+        WHERE is_active = 1
+        ORDER BY CASE WHEN type = 'PLEX' THEN 1 ELSE 0 END
+        LIMIT 1
+        """
+    )
     abstract fun getActive(): Flow<ProviderEntity?>
+
+    @Query("SELECT * FROM providers WHERE type = 'PLEX' AND is_active = 1 LIMIT 1")
+    abstract fun getActiveBackup(): Flow<ProviderEntity?>
 
     @Query("SELECT * FROM providers WHERE server_url = :serverUrl AND username = :username AND stalker_mac_address = :stalkerMacAddress")
     abstract suspend fun getByUrlAndUser(
@@ -58,6 +69,10 @@ abstract class ProviderDao {
     @Query("UPDATE providers SET is_active = 0")
     abstract suspend fun deactivateAll()
 
+    /** Deactivates live providers only — Plex backup stays enabled alongside Xtream. */
+    @Query("UPDATE providers SET is_active = 0 WHERE type != 'PLEX'")
+    abstract suspend fun deactivateLiveProviders()
+
     @Query("UPDATE providers SET is_active = 1 WHERE id = :id")
     abstract suspend fun activate(id: Long)
 
@@ -69,24 +84,35 @@ abstract class ProviderDao {
 
     @Transaction
     open suspend fun insert(provider: ProviderEntity): Long {
-        if (provider.isActive) {
-            deactivateAll()
+        if (provider.isActive && provider.type != ProviderType.PLEX) {
+            deactivateLiveProviders()
         }
         return insertDirect(provider)
     }
 
     @Transaction
     open suspend fun update(provider: ProviderEntity) {
-        if (provider.isActive) {
-            deactivateAll()
+        if (provider.isActive && provider.type != ProviderType.PLEX) {
+            deactivateLiveProviders()
         }
         updateDirect(provider)
     }
 
-    /** Atomically deactivates all providers then activates the given one. */
+    /** Activates a live provider without disabling Plex backup. */
     @Transaction
     open suspend fun setActive(id: Long) {
-        deactivateAll()
+        val provider = getById(id) ?: return
+        if (provider.type == ProviderType.PLEX) {
+            activate(id)
+        } else {
+            deactivateLiveProviders()
+            activate(id)
+        }
+    }
+
+    /** Enables Plex VOD backup alongside the current live provider. */
+    @Transaction
+    open suspend fun setBackupActive(id: Long) {
         activate(id)
     }
 }

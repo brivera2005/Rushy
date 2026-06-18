@@ -46,6 +46,22 @@ internal class SettingsProviderActions(
                 uiState.update { it.copy(userMessage = "Could not activate provider: provider not found") }
                 return@launch
             }
+            if (provider.type == ProviderType.PLEX) {
+                when (val result = providerRepository.setBackupProvider(providerId)) {
+                    is Result.Error -> {
+                        uiState.update { it.copy(userMessage = "Could not enable Plex backup: ${result.message}") }
+                        return@launch
+                    }
+                    else -> Unit
+                }
+                refreshProvider(
+                    scope = scope,
+                    providerId = providerId,
+                    syncMode = SettingsProviderSyncMode.SYNC_NOW,
+                    progressPrefix = "Syncing ${provider.name} backup..."
+                )
+                return@launch
+            }
             // Write to the repository first; only persist UI-layer preferences on success.
             when (val result = providerRepository.setActiveProvider(providerId)) {
                 is Result.Error -> {

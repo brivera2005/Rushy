@@ -124,8 +124,11 @@ class SyncManagerTest {
         override suspend fun update(provider: ProviderEntity) = Unit
         override suspend fun delete(id: Long) = Unit
         override suspend fun deactivateAll() = Unit
+        override suspend fun deactivateLiveProviders() = Unit
         override suspend fun activate(id: Long) = Unit
         override suspend fun setActive(id: Long) = Unit
+        override suspend fun setBackupActive(id: Long) = Unit
+        override fun getActiveBackup() = kotlinx.coroutines.flow.flowOf(null)
         override suspend fun getByUrlAndUser(
             serverUrl: String,
             username: String,

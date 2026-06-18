@@ -159,6 +159,9 @@ class ProviderRepositoryImpl @Inject constructor(
         return try {
             val provider = providerDao.getById(id)
                 ?: return Result.error("Provider not found")
+            if (provider.type == ProviderType.PLEX) {
+                return setBackupProvider(id)
+            }
             if (!hasUsableLiveCatalogForActivation(id, provider.type, channelDao, categoryDao, syncMetadataRepository)) {
                 syncManager.scheduleProviderSyncResume(id)
                 return Result.error("Provider is saved but no content has been committed yet. Sync will resume in background.")
@@ -167,6 +170,21 @@ class ProviderRepositoryImpl @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Result.error("Failed to set active provider: ${e.message}", e)
+        }
+    }
+
+    override suspend fun setBackupProvider(id: Long): Result<Unit> {
+        return try {
+            val provider = providerDao.getById(id)
+                ?: return Result.error("Provider not found")
+            if (provider.type != ProviderType.PLEX) {
+                return Result.error("Only Plex can be enabled as a VOD backup provider")
+            }
+            providerDao.setBackupActive(id)
+            syncManager.scheduleProviderSyncResume(id)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.error("Failed to enable Plex backup: ${e.message}", e)
         }
     }
 
@@ -524,6 +542,7 @@ class ProviderRepositoryImpl @Inject constructor(
                 providerData = providerData,
                 syncResult = syncManager.sync(providerData.id, force = false, onProgress = onProgress),
                 syncFailurePrefix = "Plex provider saved, but initial sync failed. The provider was saved and can be retried from Settings",
+                activateAsBackup = true,
             )
         } catch (e: Exception) {
             Result.error("Failed to add Plex provider: ${e.message}", e)
@@ -690,7 +709,8 @@ class ProviderRepositoryImpl @Inject constructor(
     private suspend fun handleInitialOnboardingSync(
         providerData: Provider,
         syncResult: Result<Unit>,
-        syncFailurePrefix: String
+        syncFailurePrefix: String,
+        activateAsBackup: Boolean = false,
     ): Result<Provider> = when (syncResult) {
         is Result.Success -> {
             val finalStatus = if (syncManager.currentSyncState(providerData.id) is SyncState.Partial) {
@@ -721,7 +741,11 @@ class ProviderRepositoryImpl @Inject constructor(
                     )
                 )
             } else {
-                providerDao.setActive(providerData.id)
+                if (activateAsBackup) {
+                    providerDao.setBackupActive(providerData.id)
+                } else {
+                    providerDao.setActive(providerData.id)
+                }
                 updateProviderSyncStatus(
                     providerData.id,
                     finalStatus,

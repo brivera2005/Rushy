@@ -16,7 +16,7 @@
     <string name="welcome_manage_providers">Manage Providers</string>
     <string name="welcome_setup_provider">Setup Provider</string>
     <string name="welcome_setup_later">Set up later</string>
-    <string name="welcome_version">v2.2.0</string>
+    <string name="welcome_version">v2.3.0</string>
     <string name="welcome_loading_title">Preparing your library</string>
     <string name="welcome_loading_subtitle">Opening the right screen for this device.</string>
     <string name="sync_section_live">Live</string>
@@ -719,6 +719,8 @@
     <string name="settings_delete">Delete</string>
     <string name="settings_pc_btn">Parental Control</string>
     <string name="settings_active">ACTIVE</string>
+    <string name="settings_backup_active">BACKUP SYNCED</string>
+    <string name="settings_enable_backup">Enable backup sync</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_subtitle">Choose the app language without leaving the TV interface.</string>
     <string name="settings_app_language">App Language</string>

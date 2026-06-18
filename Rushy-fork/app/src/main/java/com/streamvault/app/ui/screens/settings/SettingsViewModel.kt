@@ -647,6 +647,27 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun syncPlexBackupLibrary(serverUrl: String, token: String) {
+        viewModelScope.launch {
+            plexCredentialStore.save(serverUrl, token)
+            plexCredentialStore.backupEnabled = true
+            when (val result = providerRepository.loginPlex(serverUrl, token, "Plex Backup")) {
+                is Result.Success -> {
+                    providerRepository.setBackupProvider(result.data.id)
+                    _uiState.update {
+                        it.copy(userMessage = appContext.getString(R.string.rushy_plex_saved))
+                    }
+                }
+                is Result.Error -> {
+                    _uiState.update {
+                        it.copy(userMessage = result.message ?: appContext.getString(R.string.rushy_plex_test_failed))
+                    }
+                }
+                else -> Unit
+            }
+        }
+    }
+
     fun setAutoDownloadAppUpdates(enabled: Boolean) {
         viewModelScope.launch {
             preferencesRepository.setAutoDownloadAppUpdates(enabled)

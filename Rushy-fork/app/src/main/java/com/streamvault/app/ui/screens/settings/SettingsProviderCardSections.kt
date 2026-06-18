@@ -164,6 +164,8 @@ private fun ProviderWarningRetryButton(
 @Composable
 internal fun ProviderActionButtons(
     isActive: Boolean,
+    isBackupActive: Boolean = false,
+    isPlexBackup: Boolean = false,
     isSyncing: Boolean,
     liveOnboardingIncomplete: Boolean,
     onConnect: () -> Unit,
@@ -172,12 +174,14 @@ internal fun ProviderActionButtons(
     onDelete: () -> Unit,
     onParentalControl: () -> Unit
 ) {
+    val providerEnabled = isActive || isBackupActive
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (!isActive) {
+        if (!providerEnabled) {
             ProviderActionButton(
                 label = when {
                     liveOnboardingIncomplete && isSyncing -> stringResource(R.string.settings_syncing_btn)
                     liveOnboardingIncomplete -> stringResource(R.string.settings_sync_btn)
+                    isPlexBackup -> stringResource(R.string.settings_enable_backup)
                     else -> stringResource(R.string.settings_connect)
                 },
                 accent = Primary,

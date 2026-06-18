@@ -113,6 +113,7 @@ private class FakeSyncProviderRepository(
     ): Boolean = false
 
     override suspend fun setActiveProvider(id: Long): Result<Unit> = error("Not used in test")
+    override suspend fun setBackupProvider(id: Long): Result<Unit> = error("Not used in test")
 
     override suspend fun loginXtream(
         serverUrl: String,

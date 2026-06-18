@@ -35,7 +35,7 @@ class ProviderDaoTest {
     }
 
     @Test
-    fun setActive_keepsExactlyOneActiveProviderAcrossRepeatedSwitches() = runTest {
+    fun setActive_keepsExactlyOneLiveProviderAcrossRepeatedSwitches() = runTest {
         providerDao.insert(provider(id = 1L, name = "One", isActive = true))
         providerDao.insert(provider(id = 2L, name = "Two", isActive = false))
         providerDao.insert(provider(id = 3L, name = "Three", isActive = true))
@@ -43,35 +43,69 @@ class ProviderDaoTest {
         providerDao.setActive(2L)
 
         var providers = providerDao.getAllSync()
-        assertThat(providers.filter(ProviderEntity::isActive).map(ProviderEntity::id)).containsExactly(2L)
+        assertThat(providers.filter { it.isActive && it.type != ProviderType.PLEX }.map(ProviderEntity::id))
+            .containsExactly(2L)
         assertThat(providerDao.getActive().first()?.id).isEqualTo(2L)
 
         providerDao.setActive(3L)
 
         providers = providerDao.getAllSync()
-        assertThat(providers.filter(ProviderEntity::isActive).map(ProviderEntity::id)).containsExactly(3L)
+        assertThat(providers.filter { it.isActive && it.type != ProviderType.PLEX }.map(ProviderEntity::id))
+            .containsExactly(3L)
         assertThat(providerDao.getActive().first()?.id).isEqualTo(3L)
     }
 
     @Test
-    fun insertAndUpdate_normalizeActiveProviderUniqueness() = runTest {
+    fun insertAndUpdate_normalizeLiveProviderUniqueness() = runTest {
         providerDao.insert(provider(id = 1L, name = "One", isActive = true))
         providerDao.insert(provider(id = 2L, name = "Two", isActive = true))
 
         var providers = providerDao.getAllSync()
-        assertThat(providers.filter(ProviderEntity::isActive).map(ProviderEntity::id)).containsExactly(2L)
+        assertThat(providers.filter { it.isActive && it.type != ProviderType.PLEX }.map(ProviderEntity::id))
+            .containsExactly(2L)
 
         providerDao.update(provider(id = 1L, name = "One", isActive = true))
 
         providers = providerDao.getAllSync()
-        assertThat(providers.filter(ProviderEntity::isActive).map(ProviderEntity::id)).containsExactly(1L)
+        assertThat(providers.filter { it.isActive && it.type != ProviderType.PLEX }.map(ProviderEntity::id))
+            .containsExactly(1L)
         assertThat(providerDao.getActive().first()?.id).isEqualTo(1L)
     }
 
-    private fun provider(id: Long, name: String, isActive: Boolean) = ProviderEntity(
+    @Test
+    fun setActive_allowsPlexBackupAlongsideLiveProvider() = runTest {
+        providerDao.insert(provider(id = 1L, name = "Rushy IPTV", isActive = true))
+        providerDao.insert(
+            provider(
+                id = 2L,
+                name = "Plex Backup",
+                type = ProviderType.PLEX,
+                isActive = false,
+            )
+        )
+
+        providerDao.setBackupActive(2L)
+
+        val providers = providerDao.getAllSync()
+        assertThat(providers.filter(ProviderEntity::isActive).map(ProviderEntity::id)).containsExactly(1L, 2L)
+        assertThat(providerDao.getActive().first()?.id).isEqualTo(1L)
+        assertThat(providerDao.getActiveBackup().first()?.id).isEqualTo(2L)
+
+        providerDao.setActive(1L)
+
+        assertThat(providerDao.getAllSync().filter(ProviderEntity::isActive).map(ProviderEntity::id))
+            .containsExactly(1L, 2L)
+    }
+
+    private fun provider(
+        id: Long,
+        name: String,
+        type: ProviderType = ProviderType.M3U,
+        isActive: Boolean,
+    ) = ProviderEntity(
         id = id,
         name = name,
-        type = ProviderType.M3U,
+        type = type,
         serverUrl = "https://example.com/$id.m3u",
         m3uUrl = "https://example.com/$id.m3u",
         isActive = isActive

@@ -40,6 +40,7 @@ internal fun ProviderSelectorTab(
     provider: Provider,
     isSelected: Boolean,
     isActive: Boolean,
+    isBackupActive: Boolean = false,
     onClick: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
@@ -98,6 +99,13 @@ internal fun ProviderSelectorTab(
                     text = stringResource(R.string.settings_active),
                     style = MaterialTheme.typography.labelSmall,
                     color = Primary,
+                    fontWeight = FontWeight.Bold
+                )
+            } else if (isBackupActive) {
+                Text(
+                    text = stringResource(R.string.settings_backup_active),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Secondary,
                     fontWeight = FontWeight.Bold
                 )
             }

@@ -748,6 +748,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize().background(ThemeColors.DarkBackground)) {
 
+        if (!showUpdateDialog) {
         Row(modifier = Modifier.fillMaxSize()) {
 
             PlexSidebar(
@@ -812,19 +813,17 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
                             onClick = { showUpdateDialog = true },
 
-                            modifier = Modifier
-
-                                .border(2.dp, ThemeColors.EmeraldAccent, RoundedCornerShape(4.dp))
-
-                                .padding(horizontal = 8.dp),
+                            modifier = Modifier.height(48.dp),
 
                         ) {
 
                             Text(
 
-                                text = "Update v${update.versionName}",
+                                text = "⬆ Update v${update.versionName}",
 
-                                color = ThemeColors.EmeraldAccent,
+                                color = ThemeColors.TextPrimary,
+
+                                style = MaterialTheme.typography.titleSmall,
 
                             )
 
@@ -1066,7 +1065,7 @@ fun RushyApp(onTriggerVoiceSearch: ((String) -> Unit) -> Unit) {
 
         }
 
-
+        }
 
         if (showUpdateDialog && pendingUpdate != null) {
 

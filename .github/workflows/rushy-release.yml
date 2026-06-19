@@ -34,9 +34,20 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
+
+      - name: Prepare DefaultCredentials for CI
+        shell: bash
+        run: |
+          EXAMPLE=app/src/main/java/com/streamvault/app/DefaultCredentials.kt.example
+          TARGET=app/src/main/java/com/streamvault/app/DefaultCredentials.kt
+          if [ ! -f "$TARGET" ]; then
+            test -f "$EXAMPLE"
+            cp "$EXAMPLE" "$TARGET"
+          fi
 
       - name: Prepare optional signing files
         shell: bash
@@ -58,7 +69,12 @@ jobs:
           fi
 
       - run: chmod +x gradlew
-      - run: ./gradlew --console=plain --no-parallel --no-daemon clean :app:assembleRelease
+      - name: Purge stale KSP/Kotlin caches
+        shell: bash
+        run: |
+          rm -rf app/build/kspCaches data/build/kspCaches player/build/kspCaches
+          rm -rf app/build/kotlin data/build/kotlin domain/build/kotlin player/build/kotlin
+      - run: ./gradlew --console=plain --no-parallel --no-daemon --no-build-cache :app:assembleRelease
 
       - name: Prepare release artifacts
         shell: bash

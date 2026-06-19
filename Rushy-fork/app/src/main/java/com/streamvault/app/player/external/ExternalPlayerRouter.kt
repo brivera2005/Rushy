@@ -110,13 +110,6 @@ object ExternalPlayerRouter {
             else -> request.streamUrl
         }.trim()
 
-        if (request.streamId > 0L && isTiviMateInstalled(context)) {
-            if (tryStartActivity(context, buildTiviMateDeepLinkIntent(request.streamId))) {
-                logLaunch(ExternalPlayerTarget.TIVIMATE, request.title, request.streamId)
-                return PlayResult.Success(ExternalPlayerTarget.TIVIMATE, request.title)
-            }
-        }
-
         if (isTiviMateInstalled(context) && playbackUrl.isNotBlank()) {
             buildPackageViewIntent(playbackUrl, TIVIMATE_PACKAGE)?.let { intent ->
                 if (tryStartActivity(context, intent)) {

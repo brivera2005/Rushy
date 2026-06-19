@@ -117,3 +117,8 @@ internal fun PlayerViewModel.buildLiveExternalRecoveryActions(
     if (hasLastChannel()) actions += PlayerNoticeAction.LAST_CHANNEL
     return actions.distinct()
 }
+
+internal fun PlayerViewModel.requestPlayerExit(noticeMessage: String? = null) {
+    noticeMessage?.let { showPlayerNotice(message = it, durationMs = 2_500L) }
+    _playerExitRequested.tryEmit(Unit)
+}

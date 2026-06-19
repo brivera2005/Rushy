@@ -86,7 +86,7 @@ import okhttp3.Request
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlayerViewModel @Inject constructor(
     @ApplicationContext
-    private val appContext: Context,
+    internal val appContext: Context,
     @param:MainPlayerEngine
     private val mainPlayerEngine: PlayerEngine,
     internal val epgRepository: EpgRepository,

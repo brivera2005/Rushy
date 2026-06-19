@@ -31,15 +31,14 @@ internal fun PlayerViewModel.launchExternalLivePlayback(finishPlayer: Boolean = 
     val streamId = currentChannelFlow.value?.streamId?.takeIf { it > 0L }
         ?: currentChannelFlow.value?.selectedVariant?.streamId?.takeIf { it > 0L }
         ?: 0L
-    return when (
-        val result = ExternalPlayerRouter.playLiveChannel(
-            context = appContext,
-            url = url,
-            title = currentTitle,
-            streamId = streamId,
-            preferMpegTs = true
-        )
-    ) {
+    val result = ExternalPlayerRouter.playLiveChannel(
+        context = appContext,
+        url = url,
+        title = currentTitle,
+        streamId = streamId,
+        preferMpegTs = true,
+    )
+    return when (result) {
         is ExternalPlayerRouter.PlayResult.Success -> {
             if (finishPlayer) {
                 requestPlayerExit("Opened ${currentTitle.ifBlank { "channel" }} in ${result.target.displayName}.")

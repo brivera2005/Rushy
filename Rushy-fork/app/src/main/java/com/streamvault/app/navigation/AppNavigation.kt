@@ -270,10 +270,13 @@ private fun NavHostController.navigateToInternalPlayer(request: PlayerNavigation
     return true
 }
 
-private fun shouldRouteLiveTvToExternalPlayer(request: PlayerNavigationRequest): Boolean {
+private fun shouldRouteLiveTvToExternalPlayer(
+    request: PlayerNavigationRequest,
+    liveTvPlayerMode: LiveTvPlayerMode,
+): Boolean {
     if (!request.contentType.equals("LIVE", ignoreCase = true)) return false
     if (request.archiveStartMs != null || request.archiveEndMs != null) return false
-    return true
+    return liveTvPlayerMode != LiveTvPlayerMode.INTERNAL
 }
 
 private fun launchExternalLivePlayer(
@@ -325,10 +328,11 @@ private fun NavHostController.navigateToExternalPlayer(
     request: PlayerNavigationRequest,
     context: android.content.Context,
     channelRepository: ChannelRepository,
+    liveTvPlayerMode: LiveTvPlayerMode,
     scope: kotlinx.coroutines.CoroutineScope,
 ): Boolean {
     if (currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) return false
-    if (shouldRouteLiveTvToExternalPlayer(request)) {
+    if (shouldRouteLiveTvToExternalPlayer(request, liveTvPlayerMode)) {
         launchExternalLivePlayer(context, channelRepository, request, scope)
         return true
     }
@@ -374,9 +378,12 @@ fun AppNavigation(mainActivity: MainActivity) {
         preferred = appLandingDestination,
         destinations = topLevelDestinations
     ).toAppRoute()
+    val liveTvPlayerMode = mainActivity.preferencesRepository.playerLiveTvPlayerMode
+        .collectAsStateWithLifecycle(initialValue = LiveTvPlayerMode.TIVIMATE_ALWAYS)
+        .value
 
     fun navigateToPlayer(request: PlayerNavigationRequest): Boolean {
-        if (shouldRouteLiveTvToExternalPlayer(request)) {
+        if (shouldRouteLiveTvToExternalPlayer(request, liveTvPlayerMode)) {
             launchExternalLivePlayer(mainActivity, mainActivity.channelRepository, request, scope)
             return true
         }
@@ -393,6 +400,7 @@ fun AppNavigation(mainActivity: MainActivity) {
                         request = request.request,
                         context = mainActivity,
                         channelRepository = mainActivity.channelRepository,
+                        liveTvPlayerMode = liveTvPlayerMode,
                         scope = scope,
                     )
                 ) {

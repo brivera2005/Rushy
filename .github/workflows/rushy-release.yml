@@ -1,0 +1,119 @@
+name: Rushy Android Release
+
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: Rushy-fork
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.app_version.outputs.version_name }}
+      release_tag: ${{ steps.app_version.outputs.release_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read app version
+        id: app_version
+        shell: bash
+        run: |
+          VERSION_NAME=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          VERSION_CODE=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
+          test -n "$VERSION_NAME" && test -n "$VERSION_CODE"
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "release_tag=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare optional signing files
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$RELEASE_STORE_PASSWORD" ] && [ -n "$RELEASE_KEY_ALIAS" ] && [ -n "$RELEASE_KEY_PASSWORD" ]; then
+            mkdir -p keystore
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > keystore/release.jks
+            printf '%s\n' \
+              'storeFile=keystore/release.jks' \
+              "storePassword=$RELEASE_STORE_PASSWORD" \
+              "keyAlias=$RELEASE_KEY_ALIAS" \
+              "keyPassword=$RELEASE_KEY_PASSWORD" \
+              > keystore.properties
+          fi
+
+      - run: chmod +x gradlew
+      - run: ./gradlew --console=plain :player:testDebugUnitTest :app:assembleRelease
+
+      - name: Prepare release artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          APK_PATH=$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)
+          test -n "$APK_PATH"
+          cp "$APK_PATH" dist/rushy.apk
+          cp version.json dist/version.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: |
+            Rushy-fork/dist/rushy.apk
+            Rushy-fork/dist/version.json
+
+  publish-release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apk
+          path: dist
+
+      - name: Extract changelog entry
+        id: changelog
+        shell: bash
+        working-directory: Rushy-fork
+        run: |
+          VERSION="${{ needs.build.outputs.version_name }}"
+          {
+            echo "notes<<EOF"
+            awk -v ver="$VERSION" '
+              $0 ~ ("^## \\[" ver "\\]") { p=1; next }
+              $0 ~ "^## " && p { p=0 }
+              p { print }
+            ' docs/CHANGELOG.md
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.release_tag }}
+          name: Rushy ${{ needs.build.outputs.version_name }}
+          body: |
+            ${{ steps.changelog.outputs.notes }}
+
+            ---
+            Built from `${{ github.sha }}`.
+          files: |
+            dist/rushy.apk
+            dist/version.json
+          make_latest: true

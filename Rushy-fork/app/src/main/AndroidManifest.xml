@@ -142,12 +142,6 @@
             android:excludeFromRecents="true"
             android:theme="@style/Theme.StreamVault" />
 
-        <activity
-            android:name=".player.external.ExternalLivePlaybackActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:theme="@style/Theme.StreamVault" />
-
         <service
             android:name=".tvinput.StreamVaultTvInputService"
             android:exported="true"

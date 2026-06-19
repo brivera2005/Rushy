@@ -250,6 +250,11 @@ class PlayerViewModel @Inject constructor(
     private val _playerExitRequested = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val playerExitRequested: SharedFlow<Unit> = _playerExitRequested.asSharedFlow()
 
+    internal fun requestPlayerExit(noticeMessage: String? = null) {
+        noticeMessage?.let { showPlayerNotice(message = it, durationMs = 2_500L) }
+        _playerExitRequested.tryEmit(Unit)
+    }
+
     internal var channelInfoHideJob: Job? = null
     internal var liveOverlayHideJob: Job? = null
     internal var diagnosticsHideJob: Job? = null

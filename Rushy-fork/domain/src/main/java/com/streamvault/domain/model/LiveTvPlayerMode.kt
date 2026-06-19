@@ -9,8 +9,8 @@ enum class LiveTvPlayerMode(val storageValue: String) {
     companion object {
         fun fromStorageValue(value: String?): LiveTvPlayerMode {
             val trimmed = value?.trim()
-            if (trimmed.isNullOrBlank()) return INTERNAL
-            return entries.firstOrNull { it.storageValue.equals(trimmed, ignoreCase = true) } ?: INTERNAL
+            if (trimmed.isNullOrBlank()) return EXTERNAL
+            return entries.firstOrNull { it.storageValue.equals(trimmed, ignoreCase = true) } ?: EXTERNAL
         }
     }
 }

@@ -7,33 +7,13 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.lifecycle.lifecycleScope
 import com.streamvault.app.navigation.PlayerNavigationRequest
-import com.streamvault.domain.repository.ChannelRepository
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
-import kotlinx.coroutines.launch
 
 /**
- * Resolves a live channel stream URL and launches it in an external player.
- * Never falls back to the in-app ExoPlayer — opens Play Store for VLC when needed.
+ * Launches a resolved live channel URL in TiviMate/VLC.
+ * Stream resolution happens before this activity starts so Hilt is not required here.
  */
 class ExternalLivePlaybackActivity : ComponentActivity() {
-
-    @EntryPoint
-    @InstallIn(SingletonComponent::class)
-    interface ExternalLivePlaybackEntryPoint {
-        fun channelRepository(): ChannelRepository
-    }
-
-    private val channelRepository: ChannelRepository by lazy {
-        EntryPointAccessors.fromApplication(
-            applicationContext,
-            ExternalLivePlaybackEntryPoint::class.java,
-        ).channelRepository()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,15 +22,16 @@ class ExternalLivePlaybackActivity : ComponentActivity() {
             finish()
             return
         }
-        lifecycleScope.launch {
-            launchExternal(playerRequest)
-            finish()
-        }
+        launchExternal(playerRequest)
+        finish()
     }
 
-    private suspend fun launchExternal(request: PlayerNavigationRequest) {
-        val resolvedUrl = resolveStreamUrl(request)
-        if (resolvedUrl.isNullOrBlank()) {
+    private fun launchExternal(request: PlayerNavigationRequest) {
+        val playbackUrl = request.streamUrl.trim()
+        val streamId = request.streamId.takeIf { it > 0L }
+            ?: request.internalId.takeIf { it > 0L }
+            ?: 0L
+        if (playbackUrl.isBlank() && streamId <= 0L) {
             Toast.makeText(
                 applicationContext,
                 "Could not resolve stream URL.",
@@ -58,13 +39,10 @@ class ExternalLivePlaybackActivity : ComponentActivity() {
             ).show()
             return
         }
-        val streamId = request.streamId.takeIf { it > 0L }
-            ?: request.internalId.takeIf { it > 0L }
-            ?: 0L
         when (
             ExternalPlayerRouter.playLiveChannel(
                 context = this,
-                url = resolvedUrl,
+                url = playbackUrl,
                 title = request.title,
                 streamId = streamId,
             )
@@ -85,14 +63,6 @@ class ExternalLivePlaybackActivity : ComponentActivity() {
                 ).show()
             }
         }
-    }
-
-    private suspend fun resolveStreamUrl(request: PlayerNavigationRequest): String? {
-        if (request.internalId > 0L) {
-            val channel = channelRepository.getChannel(request.internalId) ?: return null
-            return channelRepository.getStreamInfo(channel).getOrNull()?.url
-        }
-        return request.streamUrl.takeIf { ExternalPlayerLauncher.isExternalPlayerLaunchUrl(it) }
     }
 
     @Suppress("DEPRECATION")

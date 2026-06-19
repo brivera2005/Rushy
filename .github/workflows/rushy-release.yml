@@ -58,7 +58,7 @@ jobs:
           fi
 
       - run: chmod +x gradlew
-      - run: ./gradlew --console=plain clean :app:assembleRelease
+      - run: ./gradlew --console=plain --no-parallel --no-daemon clean :app:assembleRelease
 
       - name: Prepare release artifacts
         shell: bash

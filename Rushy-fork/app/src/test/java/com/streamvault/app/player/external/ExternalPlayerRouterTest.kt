@@ -32,7 +32,19 @@ class ExternalPlayerRouterTest {
     }
 
     @Test
-    fun `buildPackageViewIntent returns null for blank URL`() {
+    fun `buildTiviMateDirectUrlIntent matches legacy Rushy ACTION_VIEW handoff`() {
+        val intent = checkNotNull(
+            ExternalPlayerRouter.buildTiviMateDirectUrlIntent(
+                "http://portal.example/live/user/pass/4242.ts",
+            )
+        )
+        assertThat(intent.action).isEqualTo(Intent.ACTION_VIEW)
+        assertThat(intent.`package`).isEqualTo(ExternalPlayerRouter.TIVIMATE_PACKAGE)
+        assertThat(intent.data.toString()).isEqualTo("http://portal.example/live/user/pass/4242.ts")
+        assertThat(intent.type).isNull()
+    }
+
+    @Test
         assertThat(ExternalPlayerRouter.buildPackageViewIntent("  ", ExternalPlayerRouter.VLC_PACKAGE)).isNull()
     }
 

@@ -287,7 +287,7 @@ class PlayerViewModel @Inject constructor(
     internal var currentResolvedStreamInfo: StreamInfo? = null
     internal var pendingCatchUpUrls: List<String> = emptyList()
     internal var livePlaybackReadyForCurrentSession: Boolean = false
-    internal var liveTvPlayerMode: LiveTvPlayerMode = LiveTvPlayerMode.EXTERNAL
+    internal var liveTvPlayerMode: LiveTvPlayerMode = LiveTvPlayerMode.TIVIMATE_ALWAYS
     private var liveUiStallRecoveryInFlight = false
     private var lastLiveUiStallRecoveryAtMs = 0L
     internal var channelNumberingMode: ChannelNumberingMode = ChannelNumberingMode.GROUP

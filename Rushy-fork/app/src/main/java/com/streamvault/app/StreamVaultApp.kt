@@ -73,6 +73,7 @@ class StreamVaultApp : Application(), SingletonImageLoader.Factory {
         runtimeDiagnosticsManager.start()
         ExternalPlayerRouter.refreshAvailability(this)
         applicationScope.launch {
+            preferencesRepository.migrateLiveTvPlayerModeToTiviMateAlways()
             providerRepository.reconcileActiveProviders()
             rushyCredentialsBootstrap.ensureDefaultCredentialsIfNeeded()
         }

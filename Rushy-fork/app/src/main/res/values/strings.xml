@@ -1120,6 +1120,7 @@
     <string name="settings_live_tv_player">Live TV player</string>
     <string name="settings_live_tv_player_subtitle">Choose the app that plays live channels. TiviMate requires the same playlist configured in TiviMate.</string>
     <string name="settings_live_tv_player_internal">Built-in player</string>
+    <string name="settings_live_tv_player_tivimate_always">TiviMate (always)</string>
     <string name="settings_live_tv_player_tivimate">TiviMate</string>
     <string name="settings_live_tv_player_tivimate_on_stall">TiviMate on stall</string>
     <string name="settings_live_tv_player_external">External player</string>

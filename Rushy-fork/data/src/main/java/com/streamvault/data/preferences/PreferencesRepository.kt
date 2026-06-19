@@ -334,9 +334,7 @@ class PreferencesRepository @Inject constructor(
     val playerLiveTvPlayerMode: Flow<com.streamvault.domain.model.LiveTvPlayerMode> = context.dataStore.data.map { preferences ->
         val saved = preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE]
         when {
-            saved == null -> com.streamvault.domain.model.LiveTvPlayerMode.EXTERNAL
-            saved.equals(com.streamvault.domain.model.LiveTvPlayerMode.INTERNAL.storageValue, ignoreCase = true) ->
-                com.streamvault.domain.model.LiveTvPlayerMode.EXTERNAL
+            saved == null -> com.streamvault.domain.model.LiveTvPlayerMode.TIVIMATE_ALWAYS
             else -> com.streamvault.domain.model.LiveTvPlayerMode.fromStorageValue(saved)
         }
     }
@@ -932,6 +930,26 @@ class PreferencesRepository @Inject constructor(
     suspend fun setPlayerLiveTvPlayerMode(mode: com.streamvault.domain.model.LiveTvPlayerMode) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE] = mode.storageValue
+        }
+    }
+
+    /**
+     * One-shot migration: existing installs default to TiviMate for all live playback unless
+     * the user explicitly chose the built-in player.
+     */
+    suspend fun migrateLiveTvPlayerModeToTiviMateAlways() {
+        context.dataStore.edit { preferences ->
+            val saved = preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE]
+            if (saved != null &&
+                saved.equals(
+                    com.streamvault.domain.model.LiveTvPlayerMode.INTERNAL.storageValue,
+                    ignoreCase = true,
+                )
+            ) {
+                return@edit
+            }
+            preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE] =
+                com.streamvault.domain.model.LiveTvPlayerMode.TIVIMATE_ALWAYS.storageValue
         }
     }
 

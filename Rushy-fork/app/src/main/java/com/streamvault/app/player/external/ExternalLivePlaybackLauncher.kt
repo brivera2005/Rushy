@@ -1,23 +1,47 @@
 package com.streamvault.app.player.external
 
+import android.app.Activity
 import android.content.Context
 import android.widget.Toast
 import com.streamvault.app.navigation.PlayerNavigationRequest
+import com.streamvault.data.remote.xtream.XtreamUrlFactory
 import com.streamvault.domain.repository.ChannelRepository
 
 internal suspend fun resolveExternalLivePlaybackUrl(
     channelRepository: ChannelRepository,
     request: PlayerNavigationRequest,
 ): String? {
+    if (request.internalId > 0L) {
+        val channel = channelRepository.getChannel(request.internalId) ?: return null
+        channelRepository.getStreamInfo(channel, preferStableUrl = true)
+            .getOrNull()
+            ?.url
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+    }
     val directUrl = request.streamUrl.trim()
     if (directUrl.isNotBlank() && ExternalPlayerLauncher.isExternalPlayerLaunchUrl(directUrl)) {
         return directUrl
     }
+    return null
+}
+
+internal suspend fun resolveExternalLiveStreamId(
+    channelRepository: ChannelRepository,
+    request: PlayerNavigationRequest,
+): Long {
     if (request.internalId > 0L) {
-        val channel = channelRepository.getChannel(request.internalId) ?: return null
-        return channelRepository.getStreamInfo(channel).getOrNull()?.url
+        val channel = channelRepository.getChannel(request.internalId)
+        if (channel != null) {
+            channel.streamId.takeIf { it > 0L }?.let { return it }
+            XtreamUrlFactory.parseInternalStreamUrl(channel.streamUrl)
+                ?.streamId
+                ?.takeIf { it > 0L }
+                ?.let { return it }
+        }
     }
-    return directUrl.takeIf { it.isNotBlank() }
+    val candidate = request.streamId.takeIf { it > 0L } ?: 0L
+    return candidate.takeUnless { it == request.internalId && request.internalId > 0L } ?: 0L
 }
 
 internal suspend fun launchExternalLivePlayer(
@@ -34,9 +58,7 @@ internal suspend fun launchExternalLivePlayer(
         ).show()
         return
     }
-    val streamId = request.streamId.takeIf { it > 0L }
-        ?: request.internalId.takeIf { it > 0L }
-        ?: 0L
+    val streamId = resolveExternalLiveStreamId(channelRepository, request)
     when (
         ExternalPlayerRouter.playLiveChannel(
             context = context,
@@ -45,7 +67,9 @@ internal suspend fun launchExternalLivePlayer(
             streamId = streamId,
         )
     ) {
-        is ExternalPlayerRouter.PlayResult.Success -> Unit
+        is ExternalPlayerRouter.PlayResult.Success -> {
+            (context as? Activity)?.finish()
+        }
         ExternalPlayerRouter.PlayResult.OpenedPlayStore -> {
             Toast.makeText(
                 context.applicationContext,
@@ -56,7 +80,7 @@ internal suspend fun launchExternalLivePlayer(
         ExternalPlayerRouter.PlayResult.AllFailed -> {
             Toast.makeText(
                 context.applicationContext,
-                "Could not open an external player for this channel.",
+                "Could not open TiviMate for this channel.",
                 Toast.LENGTH_SHORT,
             ).show()
         }

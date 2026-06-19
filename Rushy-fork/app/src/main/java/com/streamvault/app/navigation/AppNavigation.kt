@@ -36,7 +36,7 @@ import com.streamvault.app.ui.screens.downloads.DownloadsScreen
 import com.streamvault.app.MainActivity
 import com.streamvault.app.player.external.launchExternalLivePlayer as startExternalLivePlayback
 import com.streamvault.domain.model.AppLandingDestination
-import com.streamvault.domain.model.LiveTvPlayerMode
+import com.streamvault.data.remote.xtream.XtreamUrlFactory
 import com.streamvault.domain.model.AppTopLevelDestination
 import com.streamvault.domain.model.MovieDetailPresentationHint
 import com.streamvault.domain.model.Series
@@ -132,7 +132,9 @@ object Routes {
             combinedSourceFilterProviderId = combinedSourceFilterProviderId,
             contentType = "LIVE",
             returnRoute = returnRoute,
-            streamId = channel.streamId.takeIf { it > 0L } ?: channel.id
+            streamId = channel.streamId.takeIf { it > 0L }
+                ?: XtreamUrlFactory.parseInternalStreamUrl(channel.streamUrl)?.streamId?.takeIf { it > 0L }
+                ?: 0L
         )
     }
 
@@ -267,8 +269,11 @@ private fun NavHostController.navigateToInternalPlayer(request: PlayerNavigation
     return true
 }
 
-private fun shouldRouteLiveTvToExternalPlayer(contentType: String): Boolean =
-    contentType.equals("LIVE", ignoreCase = true)
+private fun shouldRouteLiveTvToExternalPlayer(request: PlayerNavigationRequest): Boolean {
+    if (!request.contentType.equals("LIVE", ignoreCase = true)) return false
+    if (request.archiveStartMs != null || request.archiveEndMs != null) return false
+    return true
+}
 
 private fun launchExternalLivePlayer(
     context: android.content.Context,
@@ -319,11 +324,10 @@ private fun NavHostController.navigateToExternalPlayer(
     request: PlayerNavigationRequest,
     context: android.content.Context,
     channelRepository: ChannelRepository,
-    liveTvPlayerMode: LiveTvPlayerMode,
     scope: kotlinx.coroutines.CoroutineScope,
 ): Boolean {
     if (currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) return false
-    if (request.contentType.equals("LIVE", ignoreCase = true) && shouldRouteLiveTvToExternalPlayer(request.contentType)) {
+    if (shouldRouteLiveTvToExternalPlayer(request)) {
         launchExternalLivePlayer(context, channelRepository, request, scope)
         return true
     }
@@ -369,12 +373,9 @@ fun AppNavigation(mainActivity: MainActivity) {
         preferred = appLandingDestination,
         destinations = topLevelDestinations
     ).toAppRoute()
-    val liveTvPlayerMode = mainActivity.preferencesRepository.playerLiveTvPlayerMode
-        .collectAsStateWithLifecycle(initialValue = LiveTvPlayerMode.EXTERNAL)
-        .value
 
     fun navigateToPlayer(request: PlayerNavigationRequest): Boolean {
-        if (request.contentType.equals("LIVE", ignoreCase = true) && shouldRouteLiveTvToExternalPlayer(request.contentType)) {
+        if (shouldRouteLiveTvToExternalPlayer(request)) {
             launchExternalLivePlayer(mainActivity, mainActivity.channelRepository, request, scope)
             return true
         }
@@ -391,7 +392,6 @@ fun AppNavigation(mainActivity: MainActivity) {
                         request = request.request,
                         context = mainActivity,
                         channelRepository = mainActivity.channelRepository,
-                        liveTvPlayerMode = liveTvPlayerMode,
                         scope = scope,
                     )
                 ) {

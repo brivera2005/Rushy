@@ -313,6 +313,7 @@ internal fun formatLiveStreamFormatModeLabel(mode: LiveStreamFormatMode): String
 
 internal fun formatLiveTvPlayerModeLabel(mode: com.streamvault.domain.model.LiveTvPlayerMode, context: android.content.Context): String = when (mode) {
     com.streamvault.domain.model.LiveTvPlayerMode.INTERNAL -> context.getString(R.string.settings_live_tv_player_internal)
+    com.streamvault.domain.model.LiveTvPlayerMode.TIVIMATE_ALWAYS -> context.getString(R.string.settings_live_tv_player_tivimate_always)
     com.streamvault.domain.model.LiveTvPlayerMode.TIVIMATE -> context.getString(R.string.settings_live_tv_player_tivimate)
     com.streamvault.domain.model.LiveTvPlayerMode.TIVIMATE_ON_STALL -> context.getString(R.string.settings_live_tv_player_tivimate_on_stall)
     com.streamvault.domain.model.LiveTvPlayerMode.EXTERNAL -> context.getString(R.string.settings_live_tv_player_external)

@@ -102,6 +102,7 @@ internal fun LazyListScope.settingsPlaybackSection(
         }
         val liveTvPlayerOptions = remember {
             listOf(
+                LiveTvPlayerMode.TIVIMATE_ALWAYS,
                 LiveTvPlayerMode.INTERNAL,
                 LiveTvPlayerMode.TIVIMATE,
                 LiveTvPlayerMode.TIVIMATE_ON_STALL,

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import com.streamvault.domain.model.ProviderType
 
 /**
@@ -110,11 +111,20 @@ object ExternalPlayerRouter {
             else -> request.streamUrl
         }.trim()
 
-        if (isTiviMateInstalled(context) && playbackUrl.isNotBlank()) {
-            buildPackageViewIntent(playbackUrl, TIVIMATE_PACKAGE)?.let { intent ->
-                if (tryStartActivity(context, intent)) {
+        if (isTiviMateInstalled(context)) {
+            if (request.streamId > 0L) {
+                if (tryStartActivity(context, buildTiviMateDeepLinkIntent(request.streamId))) {
                     logLaunch(ExternalPlayerTarget.TIVIMATE, request.title, request.streamId)
                     return PlayResult.Success(ExternalPlayerTarget.TIVIMATE, request.title)
+                }
+            }
+
+            if (playbackUrl.isNotBlank()) {
+                buildTiviMateDirectUrlIntent(playbackUrl)?.let { intent ->
+                    if (tryStartActivity(context, intent)) {
+                        logLaunch(ExternalPlayerTarget.TIVIMATE, request.title, request.streamId)
+                        return PlayResult.Success(ExternalPlayerTarget.TIVIMATE, request.title)
+                    }
                 }
             }
         }
@@ -209,6 +219,18 @@ object ExternalPlayerRouter {
             data = Uri.parse("tivimate://watch?id=$streamId")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
+
+    /** Legacy Rushy TiviMate handoff: ACTION_VIEW + package + stream URL (no MIME type). */
+    fun buildTiviMateDirectUrlIntent(url: String): Intent? {
+        val trimmed = url.trim()
+        if (trimmed.isBlank()) return null
+        if (!ExternalPlayerLauncher.isExternalPlayerLaunchUrl(trimmed)) return null
+        return Intent(Intent.ACTION_VIEW).apply {
+            setPackage(TIVIMATE_PACKAGE)
+            data = Uri.parse(trimmed)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
 
     fun buildPackageViewIntent(url: String, packageName: String?): Intent? {
         val launchUrl = url.trim().takeIf { it.isNotBlank() } ?: return null

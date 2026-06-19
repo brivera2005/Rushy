@@ -8,8 +8,7 @@ import com.streamvault.domain.model.LiveTvPlayerMode
 internal fun PlayerViewModel.shouldDelegateLivePlayback(mode: LiveTvPlayerMode): Boolean =
     currentContentType == ContentType.LIVE &&
         !isCatchUpPlayback() &&
-        mode != LiveTvPlayerMode.INTERNAL &&
-        mode != LiveTvPlayerMode.TIVIMATE_ON_STALL
+        mode != LiveTvPlayerMode.INTERNAL
 
 internal suspend fun PlayerViewModel.tryDelegateLivePlaybackAtStart(
     mode: LiveTvPlayerMode,
@@ -17,10 +16,11 @@ internal suspend fun PlayerViewModel.tryDelegateLivePlaybackAtStart(
 ): Boolean {
     if (!shouldDelegateLivePlayback(mode)) return false
     return when (mode) {
-        LiveTvPlayerMode.TIVIMATE -> launchExternalLivePlayback(finishPlayer = true)
-        LiveTvPlayerMode.EXTERNAL -> launchExternalPlayerForCurrentStream(finishPlayer = true)
-        LiveTvPlayerMode.INTERNAL,
-        LiveTvPlayerMode.TIVIMATE_ON_STALL -> false
+        LiveTvPlayerMode.TIVIMATE_ALWAYS,
+        LiveTvPlayerMode.TIVIMATE,
+        LiveTvPlayerMode.EXTERNAL,
+        LiveTvPlayerMode.TIVIMATE_ON_STALL -> launchExternalLivePlayback(finishPlayer = true)
+        LiveTvPlayerMode.INTERNAL -> false
     }
 }
 

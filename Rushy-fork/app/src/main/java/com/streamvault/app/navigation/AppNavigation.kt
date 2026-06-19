@@ -188,7 +188,8 @@ object Routes {
         seriesId: Long? = null,
         seasonNumber: Int? = null,
         episodeNumber: Int? = null,
-        episodeId: Long? = null
+        episodeId: Long? = null,
+        streamId: Long = 0L
     ): PlayerNavigationRequest {
         return PlayerNavigationRequest(
             streamUrl = streamUrl,
@@ -209,7 +210,8 @@ object Routes {
             seriesId = seriesId,
             seasonNumber = seasonNumber,
             episodeNumber = episodeNumber,
-            episodeId = episodeId
+            episodeId = episodeId,
+            streamId = streamId
         )
     }
 

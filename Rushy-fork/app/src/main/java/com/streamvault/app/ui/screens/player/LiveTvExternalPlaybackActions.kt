@@ -29,7 +29,7 @@ internal fun PlayerViewModel.launchExternalLivePlayback(finishPlayer: Boolean = 
         ?: currentStreamUrl.takeIf { it.isNotBlank() }
         ?: return false
     val streamId = currentChannelFlow.value?.streamId?.takeIf { it > 0L }
-        ?: currentChannelFlow.value?.selectedVariant?.streamId?.takeIf { it > 0L }
+        ?: currentChannelFlow.value?.currentVariant?.streamId?.takeIf { it > 0L }
         ?: 0L
     val result = ExternalPlayerRouter.playLiveChannel(
         context = appContext,

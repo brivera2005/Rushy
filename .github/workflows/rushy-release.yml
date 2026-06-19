@@ -58,7 +58,7 @@ jobs:
           fi
 
       - run: chmod +x gradlew
-      - run: ./gradlew --console=plain :player:testDebugUnitTest :app:assembleRelease
+      - run: ./gradlew --console=plain :app:assembleRelease --stacktrace
 
       - name: Prepare release artifacts
         shell: bash

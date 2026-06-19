@@ -10,22 +10,13 @@ object LivePlaybackRouter {
     const val TIVIMATE_PACKAGE = ExternalPlayerRouter.TIVIMATE_PACKAGE
     const val VLC_PACKAGE = ExternalPlayerRouter.VLC_PACKAGE
 
-    typealias ExternalPlayerTarget = ExternalPlayerRouter.ExternalPlayerTarget
-    typealias LiveLaunchRequest = ExternalPlayerRouter.LiveLaunchRequest
-
-    sealed interface LiveLaunchResult {
-        data class Success(val target: ExternalPlayerTarget) : LiveLaunchResult
-        data object AllFailed : LiveLaunchResult
-        data object OpenedPlayStore : LiveLaunchResult
-    }
-
     fun isPackageInstalled(context: Context, packageName: String): Boolean =
         runCatching {
             context.packageManager.getPackageInfo(packageName, 0)
             true
         }.getOrDefault(false)
 
-    fun resolvePreferredExternalPlayer(context: Context): ExternalPlayerTarget =
+    fun resolvePreferredExternalPlayer(context: Context): ExternalPlayerRouter.ExternalPlayerTarget =
         ExternalPlayerRouter.resolvePreferredExternalPlayer(context)
 
     fun preferredExternalPlayerLabel(context: Context): String =
@@ -39,13 +30,8 @@ object LivePlaybackRouter {
 
     fun toMpegTsUrl(url: String): String = ExternalPlayerRouter.toMpegTsUrl(url)
 
-    fun launchLiveStream(context: Context, request: LiveLaunchRequest): LiveLaunchResult =
-        when (val result = ExternalPlayerRouter.launchLiveStream(context, request)) {
-            is ExternalPlayerRouter.PlayResult.Success ->
-                LiveLaunchResult.Success(result.target)
-            ExternalPlayerRouter.PlayResult.OpenedPlayStore ->
-                LiveLaunchResult.OpenedPlayStore
-            ExternalPlayerRouter.PlayResult.AllFailed ->
-                LiveLaunchResult.AllFailed
-        }
+    fun launchLiveStream(
+        context: Context,
+        request: ExternalPlayerRouter.LiveLaunchRequest,
+    ): ExternalPlayerRouter.PlayResult = ExternalPlayerRouter.launchLiveStream(context, request)
 }

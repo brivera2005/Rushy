@@ -13,10 +13,10 @@ class PlaybackBufferPoliciesTest {
         val policy = PlaybackBufferPolicies.forPlayback(isLive = true, compatibilityMode = false)
 
         assertThat(policy.label).isEqualTo("stable-live")
-        assertThat(policy.minBufferMs).isEqualTo(8_000)
-        assertThat(policy.maxBufferMs).isEqualTo(30_000)
-        assertThat(policy.playbackBufferMs).isEqualTo(1_500)
-        assertThat(policy.rebufferMs).isEqualTo(5_000)
+        assertThat(policy.minBufferMs).isEqualTo(12_000)
+        assertThat(policy.maxBufferMs).isEqualTo(45_000)
+        assertThat(policy.playbackBufferMs).isEqualTo(2_500)
+        assertThat(policy.rebufferMs).isEqualTo(8_000)
         assertThat(policy.targetBufferBytes).isEqualTo(-1)
         assertThat(policy.prioritizeTimeOverSizeThresholds).isTrue()
     }
@@ -31,10 +31,10 @@ class PlaybackBufferPoliciesTest {
         )
 
         assertThat(policy.label).isEqualTo("stable-live")
-        assertThat(policy.minBufferMs).isEqualTo(8_000)
-        assertThat(policy.maxBufferMs).isEqualTo(30_000)
-        assertThat(policy.playbackBufferMs).isEqualTo(1_500)
-        assertThat(policy.rebufferMs).isEqualTo(5_000)
+        assertThat(policy.minBufferMs).isEqualTo(12_000)
+        assertThat(policy.maxBufferMs).isEqualTo(45_000)
+        assertThat(policy.playbackBufferMs).isEqualTo(2_500)
+        assertThat(policy.rebufferMs).isEqualTo(8_000)
         assertThat(policy.targetBufferBytes).isEqualTo(-1)
     }
 
@@ -170,10 +170,10 @@ class PlaybackBufferPoliciesTest {
         val policy = PlaybackBufferPolicies.forPlayback(isLive = true, compatibilityMode = true)
 
         assertThat(policy.label).isEqualTo("compat-live")
-        assertThat(policy.minBufferMs).isEqualTo(15_000)
-        assertThat(policy.maxBufferMs).isEqualTo(45_000)
-        assertThat(policy.playbackBufferMs).isEqualTo(1_500)
-        assertThat(policy.rebufferMs).isEqualTo(5_000)
+        assertThat(policy.minBufferMs).isEqualTo(18_000)
+        assertThat(policy.maxBufferMs).isEqualTo(60_000)
+        assertThat(policy.playbackBufferMs).isEqualTo(2_500)
+        assertThat(policy.rebufferMs).isEqualTo(8_000)
         assertThat(policy.targetBufferBytes).isEqualTo(-1)
         assertThat(policy.prioritizeTimeOverSizeThresholds).isTrue()
     }
@@ -201,10 +201,10 @@ class PlaybackBufferPoliciesTest {
         )
 
         assertThat(policy.label).isEqualTo("mpeg-ts-live")
-        assertThat(policy.minBufferMs).isEqualTo(5_000)
-        assertThat(policy.maxBufferMs).isEqualTo(10_000)
-        assertThat(policy.playbackBufferMs).isEqualTo(1_500)
-        assertThat(policy.rebufferMs).isEqualTo(5_000)
+        assertThat(policy.minBufferMs).isEqualTo(8_000)
+        assertThat(policy.maxBufferMs).isEqualTo(20_000)
+        assertThat(policy.playbackBufferMs).isEqualTo(2_500)
+        assertThat(policy.rebufferMs).isEqualTo(8_000)
         assertThat(policy.targetBufferBytes).isEqualTo(16 * 1024 * 1024)
         assertThat(policy.prioritizeTimeOverSizeThresholds).isTrue()
     }
@@ -220,8 +220,8 @@ class PlaybackBufferPoliciesTest {
         )
 
         assertThat(policy.label).isEqualTo("mpeg-ts-live")
-        assertThat(policy.minBufferMs).isEqualTo(5_000)
-        assertThat(policy.maxBufferMs).isEqualTo(10_000)
+        assertThat(policy.minBufferMs).isEqualTo(8_000)
+        assertThat(policy.maxBufferMs).isEqualTo(20_000)
         assertThat(policy.targetBufferBytes).isEqualTo(16 * 1024 * 1024)
     }
 

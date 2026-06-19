@@ -1506,6 +1506,8 @@ private fun playerNoticeActionLabel(action: PlayerNoticeAction): String =
         PlayerNoticeAction.LAST_CHANNEL -> stringResource(R.string.player_last_channel_action)
         PlayerNoticeAction.ALTERNATE_STREAM -> stringResource(R.string.player_try_alternate_stream)
         PlayerNoticeAction.OPEN_GUIDE -> stringResource(R.string.player_open_guide_action)
+        PlayerNoticeAction.OPEN_TIVIMATE -> stringResource(R.string.player_open_in_tivimate)
+        PlayerNoticeAction.OPEN_EXTERNAL_PLAYER -> stringResource(R.string.player_open_in_external_player)
     }
 
 @Composable

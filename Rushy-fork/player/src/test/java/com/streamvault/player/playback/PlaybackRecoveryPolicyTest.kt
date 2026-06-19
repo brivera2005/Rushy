@@ -6,6 +6,17 @@ import org.junit.Test
 class PlaybackRecoveryPolicyTest {
 
     @Test
+    fun `live provider stream after playback start allows live stall recovery`() {
+        assertThat(
+            shouldAttemptAutomaticRecovery(
+                action = AutomaticRecoveryAction.LIVE_STALL_RECOVERY,
+                resolvedStreamType = ResolvedStreamType.MPEG_TS_LIVE,
+                playbackStarted = true
+            )
+        ).isTrue()
+    }
+
+    @Test
     fun `live provider stream after playback start blocks full reprepare`() {
         assertThat(
             shouldAttemptAutomaticRecovery(

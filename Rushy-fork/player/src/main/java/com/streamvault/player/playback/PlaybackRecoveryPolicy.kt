@@ -2,6 +2,7 @@ package com.streamvault.player.playback
 
 internal enum class AutomaticRecoveryAction {
     FULL_REPREPARE,
+    LIVE_STALL_RECOVERY,
     SURFACE_FALLBACK,
     DECODER_FALLBACK
 }
@@ -13,7 +14,8 @@ internal fun shouldAttemptAutomaticRecovery(
 ): Boolean {
     if (!playbackStarted) return true
     if (!resolvedStreamType.isLiveProviderSession()) return true
-    return action == AutomaticRecoveryAction.SURFACE_FALLBACK
+    return action == AutomaticRecoveryAction.SURFACE_FALLBACK ||
+        action == AutomaticRecoveryAction.LIVE_STALL_RECOVERY
 }
 
 private fun ResolvedStreamType.isLiveProviderSession(): Boolean {

@@ -11,12 +11,14 @@ internal fun shouldRecoverPositionAdvancingReadyStalls(resolvedStreamType: Resol
 internal fun shouldRecoverFrameSilentReadyStalls(resolvedStreamType: ResolvedStreamType): Boolean =
     resolvedStreamType.isLiveForStallRecovery
 
+private const val MAX_LIVE_STALL_RECONNECT_ATTEMPTS = 3
+
 internal fun shouldReconnectLiveStall(
     playbackState: PlaybackState,
     resolvedStreamType: ResolvedStreamType,
     recoveryAttempt: Int
 ): Boolean =
-    recoveryAttempt == 1 &&
+    recoveryAttempt in 1..MAX_LIVE_STALL_RECONNECT_ATTEMPTS &&
         (
             playbackState == PlaybackState.BUFFERING && resolvedStreamType.isLiveForStallRecovery ||
                 playbackState == PlaybackState.READY && resolvedStreamType.isLiveForStallRecovery

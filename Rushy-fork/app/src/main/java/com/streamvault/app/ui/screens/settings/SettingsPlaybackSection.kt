@@ -18,18 +18,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.streamvault.app.R
+import com.streamvault.app.player.external.LivePlaybackRouter
 import com.streamvault.app.ui.interaction.TvClickableSurface
 import com.streamvault.app.ui.theme.OnBackground
 import com.streamvault.app.ui.theme.OnSurface
 import com.streamvault.app.ui.theme.Primary
+import com.streamvault.domain.model.ExternalPlaybackMode
 import com.streamvault.domain.model.LiveStreamFormatMode
+import com.streamvault.domain.model.LiveTvPlayerMode
 
 internal fun LazyListScope.settingsPlaybackSection(
     uiState: SettingsUiState,
@@ -84,13 +89,42 @@ internal fun LazyListScope.settingsPlaybackSection(
 ) {
     item {
         val liveStreamFormatMode by viewModel.playerLiveStreamFormatMode.collectAsStateWithLifecycle()
+        val liveTvPlayerMode by viewModel.playerLiveTvPlayerMode.collectAsStateWithLifecycle()
+        val context = LocalContext.current
         var showLiveStreamFormatDialog by rememberSaveable { mutableStateOf(false) }
+        var showLiveTvPlayerDialog by rememberSaveable { mutableStateOf(false) }
         val liveStreamFormatOptions = remember {
             listOf(
                 LiveStreamFormatMode.AUTO,
                 LiveStreamFormatMode.HLS,
                 LiveStreamFormatMode.MPEG_TS
             )
+        }
+        val liveTvPlayerOptions = remember {
+            listOf(
+                LiveTvPlayerMode.INTERNAL,
+                LiveTvPlayerMode.TIVIMATE,
+                LiveTvPlayerMode.TIVIMATE_ON_STALL,
+                LiveTvPlayerMode.EXTERNAL
+            )
+        }
+        if (showLiveTvPlayerDialog) {
+            PremiumSelectionDialog(
+                title = stringResource(R.string.settings_live_tv_player),
+                onDismiss = { showLiveTvPlayerDialog = false }
+            ) {
+                liveTvPlayerOptions.forEachIndexed { index, mode ->
+                    LevelOption(
+                        level = index,
+                        text = formatLiveTvPlayerModeLabel(mode, context),
+                        currentLevel = if (liveTvPlayerMode == mode) index else -1,
+                        onSelect = {
+                            viewModel.setPlayerLiveTvPlayerMode(mode)
+                            showLiveTvPlayerDialog = false
+                        }
+                    )
+                }
+            }
         }
         if (showLiveStreamFormatDialog) {
             PremiumSelectionDialog(
@@ -278,6 +312,17 @@ internal fun LazyListScope.settingsPlaybackSection(
             value = formatLiveStreamFormatModeLabel(liveStreamFormatMode),
             onClick = { showLiveStreamFormatDialog = true }
         )
+        ClickableSettingsRow(
+            label = stringResource(R.string.settings_live_tv_player),
+            value = formatLiveTvPlayerModeLabel(liveTvPlayerMode, context),
+            onClick = { showLiveTvPlayerDialog = true }
+        )
+        Text(
+            text = stringResource(R.string.settings_live_tv_player_subtitle),
+            style = MaterialTheme.typography.bodySmall,
+            color = OnBackground.copy(alpha = 0.6f),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
         HorizontalDivider(color = Color.White.copy(alpha = 0.07f), modifier = Modifier.padding(vertical = 4.dp))
         TvClickableSurface(
             onClick = { viewModel.setZapAutoRevert(!uiState.zapAutoRevert) },
@@ -321,6 +366,14 @@ internal fun LazyListScope.settingsPlaybackSection(
             value = externalPlaybackModeLabel,
             onClick = { onShowExternalPlaybackModeDialogChange(true) }
         )
+        if (uiState.playerExternalPlaybackMode != ExternalPlaybackMode.INTERNAL_PLAYER) {
+            val externalAppLabel = LivePlaybackRouter.preferredExternalPlayerLabel(LocalContext.current)
+            ClickableSettingsRow(
+                label = stringResource(R.string.settings_external_playback_external_app),
+                value = externalAppLabel,
+                onClick = { onShowExternalPlaybackModeDialogChange(true) }
+            )
+        }
         TvClickableSurface(
             onClick = {
                 viewModel.setPlayerCompatibilityMemoryEnabled(!uiState.playerCompatibilityMemoryEnabled)

@@ -33,7 +33,9 @@ import com.streamvault.app.ui.screens.settings.SettingsScreen
 import com.streamvault.app.ui.screens.welcome.WelcomeScreen
 import com.streamvault.app.ui.screens.downloads.DownloadsScreen
 import com.streamvault.app.MainActivity
+import com.streamvault.app.player.external.ExternalLivePlaybackActivity
 import com.streamvault.domain.model.AppLandingDestination
+import com.streamvault.domain.model.LiveTvPlayerMode
 import com.streamvault.domain.model.AppTopLevelDestination
 import com.streamvault.domain.model.MovieDetailPresentationHint
 import com.streamvault.domain.model.Series
@@ -67,7 +69,8 @@ data class PlayerNavigationRequest(
     val seriesId: Long? = null,
     val seasonNumber: Int? = null,
     val episodeNumber: Int? = null,
-    val episodeId: Long? = null
+    val episodeId: Long? = null,
+    val streamId: Long = 0L
 ) : Serializable
 
 object Routes {
@@ -126,7 +129,8 @@ object Routes {
             combinedProfileId = combinedProfileId,
             combinedSourceFilterProviderId = combinedSourceFilterProviderId,
             contentType = "LIVE",
-            returnRoute = returnRoute
+            returnRoute = returnRoute,
+            streamId = channel.streamId.takeIf { it > 0L } ?: channel.id
         )
     }
 
@@ -252,11 +256,18 @@ private suspend fun Lifecycle.awaitResumed() {
     }
 }
 
-private fun NavHostController.navigateToPlayer(request: PlayerNavigationRequest): Boolean {
+private fun NavHostController.navigateToInternalPlayer(request: PlayerNavigationRequest): Boolean {
     if (currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) return false
     currentBackStackEntry?.savedStateHandle?.set(PLAYER_REQUEST_KEY, request)
     navigate(Routes.PLAYER) { launchSingleTop = true }
     return true
+}
+
+private fun shouldRouteLiveTvToExternalPlayer(mode: LiveTvPlayerMode): Boolean =
+    mode == LiveTvPlayerMode.TIVIMATE || mode == LiveTvPlayerMode.EXTERNAL
+
+private fun launchExternalLivePlayer(context: android.content.Context, request: PlayerNavigationRequest) {
+    context.startActivity(ExternalLivePlaybackActivity.createIntent(context, request))
 }
 
 private fun NavHostController.navigateToMovieDetail(movie: Movie, returnRoute: String? = null): Boolean {
@@ -293,11 +304,17 @@ private fun Series.toSeriesDetailPresentationHint(): SeriesDetailPresentationHin
     )
 }
 
-private fun NavHostController.navigateToExternalPlayer(request: PlayerNavigationRequest): Boolean {
+private fun NavHostController.navigateToExternalPlayer(
+    request: PlayerNavigationRequest,
+    context: android.content.Context,
+    liveTvPlayerMode: LiveTvPlayerMode,
+): Boolean {
     if (currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) return false
-    currentBackStackEntry?.savedStateHandle?.set(PLAYER_REQUEST_KEY, request)
-    navigate(Routes.PLAYER) { launchSingleTop = true }
-    return true
+    if (request.contentType.equals("LIVE", ignoreCase = true) && shouldRouteLiveTvToExternalPlayer(liveTvPlayerMode)) {
+        launchExternalLivePlayer(context, request)
+        return true
+    }
+    return navigateToInternalPlayer(request)
 }
 
 internal fun AppLandingDestination.toAppRoute(): String = when (this) {
@@ -338,13 +355,30 @@ fun AppNavigation(mainActivity: MainActivity) {
         preferred = appLandingDestination,
         destinations = topLevelDestinations
     ).toAppRoute()
+    val liveTvPlayerMode = mainActivity.preferencesRepository.playerLiveTvPlayerMode
+        .collectAsStateWithLifecycle(initialValue = LiveTvPlayerMode.INTERNAL)
+        .value
+
+    fun navigateToPlayer(request: PlayerNavigationRequest): Boolean {
+        if (request.contentType.equals("LIVE", ignoreCase = true) && shouldRouteLiveTvToExternalPlayer(liveTvPlayerMode)) {
+            launchExternalLivePlayer(mainActivity, request)
+            return true
+        }
+        return navController.navigateToInternalPlayer(request)
+    }
 
     LaunchedEffect(externalNavigationRequest, currentBackStackEntry) {
         val entry = currentBackStackEntry ?: return@LaunchedEffect
         entry.lifecycle.awaitResumed()
         when (val request = externalNavigationRequest) {
             is ExternalNavigationRequest.Player -> {
-                if (navController.navigateToExternalPlayer(request.request)) {
+                if (
+                    navController.navigateToExternalPlayer(
+                        request = request.request,
+                        context = mainActivity,
+                        liveTvPlayerMode = liveTvPlayerMode,
+                    )
+                ) {
                     mainActivity.clearExternalNavigationRequest()
                 }
             }
@@ -443,7 +477,7 @@ fun AppNavigation(mainActivity: MainActivity) {
                     navController.navigate(Routes.providerSetup(null))
                 },
                 onRecentChannelClick = { channel, combinedProfileId ->
-                    navController.navigateToPlayer(
+                    navigateToPlayer(
                         Routes.livePlayer(
                             channel = channel,
                             categoryId = com.streamvault.domain.model.VirtualCategoryIds.RECENT,
@@ -455,7 +489,7 @@ fun AppNavigation(mainActivity: MainActivity) {
                     )
                 },
                 onFavoriteChannelClick = { channel, combinedProfileId ->
-                    navController.navigateToPlayer(
+                    navigateToPlayer(
                         Routes.livePlayer(
                             channel = channel,
                             categoryId = com.streamvault.domain.model.VirtualCategoryIds.FAVORITES,
@@ -512,7 +546,7 @@ fun AppNavigation(mainActivity: MainActivity) {
                         }
                     }
                     if (route is PlayerNavigationRequest) {
-                        navController.navigateToPlayer(route)
+                        navigateToPlayer(route)
                     } else {
                         navController.navigateIfResumed(route as String) { launchSingleTop = true }
                     }
@@ -530,7 +564,7 @@ fun AppNavigation(mainActivity: MainActivity) {
             val initialCategoryId = backStackEntry.arguments?.getLong("categoryId")?.takeIf { it != -1L }
             HomeScreen(
                 onChannelClick = { channel, category, provider, combinedProfileId, combinedSourceFilterProviderId ->
-                    navController.navigateToPlayer(
+                    navigateToPlayer(
                         Routes.livePlayer(
                             channel = channel,
                             categoryId = category?.id,
@@ -555,7 +589,7 @@ fun AppNavigation(mainActivity: MainActivity) {
                     navController.navigateToMovieDetail(movie, Routes.MOVIES)
                 },
                 onContinueWatchingPlay = { history ->
-                    navController.navigateToPlayer(
+                    navigateToPlayer(
                         history.toPlayerNavigationRequest().copy(returnRoute = Routes.MOVIES)
                     )
                 },
@@ -601,7 +635,7 @@ fun AppNavigation(mainActivity: MainActivity) {
                 initialAnchorTime = epgAnchorTime,
                 initialFavoritesOnly = epgFavoritesOnly,
                 onPlayChannel = { channel, categoryId, isVirtual, combinedProfileId, returnRoute ->
-                    navController.navigateToPlayer(
+                    navigateToPlayer(
                         Routes.livePlayer(
                             channel = channel,
                             categoryId = categoryId,
@@ -616,7 +650,7 @@ fun AppNavigation(mainActivity: MainActivity) {
                     if (!channel.isArchivePlayable(program)) {
                         return@FullEpgScreen
                     }
-                    navController.navigateToPlayer(
+                    navigateToPlayer(
                         Routes.player(
                             streamUrl = channel.streamUrl,
                             title = channel.name,
@@ -690,7 +724,7 @@ fun AppNavigation(mainActivity: MainActivity) {
             com.streamvault.app.ui.screens.search.SearchScreen(
                 initialQuery = backStackEntry.arguments?.getString("query").orEmpty(),
                 onChannelClick = { channel ->
-                    navController.navigateToPlayer(
+                    navigateToPlayer(
                         Routes.livePlayer(
                             channel = channel,
                             categoryId = channel.categoryId ?: ChannelRepository.ALL_CHANNELS_ID,
@@ -802,7 +836,7 @@ fun AppNavigation(mainActivity: MainActivity) {
             val movieId = backStackEntry.arguments?.getLong("movieId") ?: -1L
             com.streamvault.app.ui.screens.movies.MovieDetailScreen(
                 onPlay = { movie ->
-                    navController.navigateToPlayer(
+                    navigateToPlayer(
                         Routes.moviePlayer(movie).copy(
                             returnRoute = Routes.movieDetail(
                                 movieId = movie.id.takeIf { it > 0L } ?: movieId,
@@ -839,7 +873,7 @@ fun AppNavigation(mainActivity: MainActivity) {
             val seriesId = backStackEntry.arguments?.getLong("seriesId") ?: -1L
             com.streamvault.app.ui.screens.series.SeriesDetailScreen(
                 onEpisodeClick = { episode ->
-                     navController.navigateToPlayer(
+                     navigateToPlayer(
                          Routes.episodePlayer(episode).copy(
                              returnRoute = Routes.seriesDetail(
                                  seriesId = episode.seriesId.takeIf { it > 0L } ?: seriesId,

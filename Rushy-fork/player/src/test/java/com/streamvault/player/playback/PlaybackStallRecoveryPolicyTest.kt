@@ -25,6 +25,28 @@ class PlaybackStallRecoveryPolicyTest {
     }
 
     @Test
+    fun `live ready stalls reconnect through third recovery attempt`() {
+        assertThat(
+            shouldReconnectLiveStall(
+                playbackState = PlaybackState.READY,
+                resolvedStreamType = ResolvedStreamType.MPEG_TS_LIVE,
+                recoveryAttempt = 3
+            )
+        ).isTrue()
+    }
+
+    @Test
+    fun `live ready stalls stop reconnecting after third recovery attempt`() {
+        assertThat(
+            shouldReconnectLiveStall(
+                playbackState = PlaybackState.READY,
+                resolvedStreamType = ResolvedStreamType.MPEG_TS_LIVE,
+                recoveryAttempt = 4
+            )
+        ).isFalse()
+    }
+
+    @Test
     fun `live ready stalls reconnect the current stream`() {
         assertThat(
             shouldReconnectLiveStall(
@@ -36,14 +58,14 @@ class PlaybackStallRecoveryPolicyTest {
     }
 
     @Test
-    fun `live ready stalls stop reconnecting after first recovery attempt`() {
+    fun `live ready stalls reconnect on second recovery attempt`() {
         assertThat(
             shouldReconnectLiveStall(
                 playbackState = PlaybackState.READY,
                 resolvedStreamType = ResolvedStreamType.MPEG_TS_LIVE,
                 recoveryAttempt = 2
             )
-        ).isFalse()
+        ).isTrue()
     }
 
     @Test

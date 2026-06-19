@@ -58,7 +58,7 @@ internal fun observeSettingsPreferenceSnapshot(
             playerSurfaceMode = com.streamvault.domain.model.PlayerSurfaceMode.AUTO,
             playerVodHttpProtocolMode = VodHttpProtocolMode.COMPATIBILITY_HTTP1,
             playerPlaybackSpeed = 1f,
-            playerExternalPlaybackMode = ExternalPlaybackMode.INTERNAL_PLAYER,
+            playerExternalPlaybackMode = ExternalPlaybackMode.EXTERNAL_PLAYER,
             playerAudioVideoSyncEnabled = false,
             playerAudioVideoOffsetMs = 0,
             centerTwoSlotMultiviewLayout = false,

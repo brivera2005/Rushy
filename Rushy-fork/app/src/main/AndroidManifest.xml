@@ -39,6 +39,9 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/vnd.apple.mpegurl" />
         </intent>
+        <package android:name="ar.tvplayer.tv" />
+        <package android:name="org.videolan.vlc" />
+        <package android:name="org.videolan.vlc.tv" />
     </queries>
 
     <application
@@ -135,6 +138,12 @@
 
         <activity
             android:name=".diagnostics.ExternalPlayerProbeActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.StreamVault" />
+
+        <activity
+            android:name=".player.external.ExternalLivePlaybackActivity"
             android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@style/Theme.StreamVault" />

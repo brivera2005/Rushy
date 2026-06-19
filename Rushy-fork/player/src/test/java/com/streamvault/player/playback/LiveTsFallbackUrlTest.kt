@@ -48,13 +48,13 @@ class LiveTsFallbackUrlTest {
     }
 
     @Test
-    fun `stalled hls does not use transport stream fallback`() {
+    fun `stalled hls uses transport stream fallback on second attempt`() {
         assertThat(
             shouldFallbackStalledHlsToLiveTs(
                 resolvedStreamType = ResolvedStreamType.HLS,
                 recoveryAttempt = 2
             )
-        ).isFalse()
+        ).isTrue()
         assertThat(
             shouldFallbackStalledHlsToLiveTs(
                 resolvedStreamType = ResolvedStreamType.HLS,

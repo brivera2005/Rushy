@@ -51,6 +51,7 @@ import com.streamvault.domain.model.GroupedChannelLabelMode
 import com.streamvault.domain.model.AudioOutputPreference
 import com.streamvault.domain.model.LiveChannelGroupingMode
 import com.streamvault.domain.model.LiveStreamFormatMode
+import com.streamvault.domain.model.LiveTvPlayerMode
 import com.streamvault.domain.model.LiveVariantPreferenceMode
 import com.streamvault.domain.model.PlaybackBufferMode
 import com.streamvault.domain.model.VodDuplicateHandlingMode
@@ -140,6 +141,12 @@ class SettingsViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = LiveStreamFormatMode.AUTO
+        )
+    val playerLiveTvPlayerMode: StateFlow<LiveTvPlayerMode> =
+        preferencesRepository.playerLiveTvPlayerMode.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = LiveTvPlayerMode.EXTERNAL
         )
     private val activeProviderIdFlow = providerRepository.getActiveProvider().map { it?.id }
     private val appUpdateActions = SettingsAppUpdateActions(
@@ -864,6 +871,12 @@ class SettingsViewModel @Inject constructor(
     fun setPlayerLiveStreamFormatMode(mode: LiveStreamFormatMode) {
         viewModelScope.launch {
             preferencesRepository.setPlayerLiveStreamFormatMode(mode)
+        }
+    }
+
+    fun setPlayerLiveTvPlayerMode(mode: LiveTvPlayerMode) {
+        viewModelScope.launch {
+            preferencesRepository.setPlayerLiveTvPlayerMode(mode)
         }
     }
 

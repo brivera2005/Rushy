@@ -36,6 +36,14 @@ fun PlayerViewModel.runPlayerNoticeAction(action: PlayerNoticeAction) {
             appendRecoveryAction("Opened guide from recovery")
             openEpgOverlay()
         }
+        PlayerNoticeAction.OPEN_TIVIMATE -> {
+            appendRecoveryAction("Opened TiviMate from recovery")
+            launchExternalLivePlayback(finishPlayer = true)
+        }
+        PlayerNoticeAction.OPEN_EXTERNAL_PLAYER -> {
+            appendRecoveryAction("Opened external player from recovery")
+            launchExternalPlayerForCurrentStream(finishPlayer = true)
+        }
     }
     dismissPlayerNotice()
 }

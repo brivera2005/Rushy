@@ -150,6 +150,7 @@ class PreferencesRepository @Inject constructor(
         val PLAYER_DECODER_MODE = stringPreferencesKey("player_decoder_mode")
         val PLAYER_PLAYBACK_BUFFER_MODE = stringPreferencesKey("player_playback_buffer_mode")
         val PLAYER_LIVE_STREAM_FORMAT_MODE = stringPreferencesKey("player_live_stream_format_mode")
+        val PLAYER_LIVE_TV_PLAYER_MODE = stringPreferencesKey("player_live_tv_player_mode")
         val PLAYER_VOD_HTTP_PROTOCOL_MODE = stringPreferencesKey("player_vod_http_protocol_mode")
         val LEGACY_PLAYER_MOVIE_HTTP_PROTOCOL_MODE = stringPreferencesKey("player_movie_http_protocol_mode")
         val PLAYER_AUDIO_OUTPUT_PREFERENCE = stringPreferencesKey("player_audio_output_preference")
@@ -330,6 +331,16 @@ class PreferencesRepository @Inject constructor(
             ?: LiveStreamFormatMode.AUTO
     }
 
+    val playerLiveTvPlayerMode: Flow<com.streamvault.domain.model.LiveTvPlayerMode> = context.dataStore.data.map { preferences ->
+        val saved = preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE]
+        when {
+            saved == null -> com.streamvault.domain.model.LiveTvPlayerMode.EXTERNAL
+            saved.equals(com.streamvault.domain.model.LiveTvPlayerMode.INTERNAL.storageValue, ignoreCase = true) ->
+                com.streamvault.domain.model.LiveTvPlayerMode.EXTERNAL
+            else -> com.streamvault.domain.model.LiveTvPlayerMode.fromStorageValue(saved)
+        }
+    }
+
     val playerVodHttpProtocolMode: Flow<VodHttpProtocolMode> = context.dataStore.data.map { preferences ->
         (
             preferences[PreferencesKeys.PLAYER_VOD_HTTP_PROTOCOL_MODE]
@@ -359,7 +370,7 @@ class PreferencesRepository @Inject constructor(
     val playerExternalPlaybackMode: Flow<com.streamvault.domain.model.ExternalPlaybackMode> = context.dataStore.data.map { preferences ->
         preferences[PreferencesKeys.PLAYER_EXTERNAL_PLAYBACK_MODE]
             ?.let { saved -> com.streamvault.domain.model.ExternalPlaybackMode.fromStorageValue(saved) }
-            ?: com.streamvault.domain.model.ExternalPlaybackMode.INTERNAL_PLAYER
+            ?: com.streamvault.domain.model.ExternalPlaybackMode.EXTERNAL_PLAYER
     }
 
     val playerAudioVideoOffsetMs: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -915,6 +926,12 @@ class PreferencesRepository @Inject constructor(
     suspend fun setPlayerLiveStreamFormatMode(mode: LiveStreamFormatMode) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.PLAYER_LIVE_STREAM_FORMAT_MODE] = mode.name
+        }
+    }
+
+    suspend fun setPlayerLiveTvPlayerMode(mode: com.streamvault.domain.model.LiveTvPlayerMode) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE] = mode.storageValue
         }
     }
 

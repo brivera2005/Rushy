@@ -420,6 +420,12 @@ fun PlayerScreen(
         archiveEndMs = archiveEndMs
     )
 
+    LaunchedEffect(Unit) {
+        viewModel.playerExitRequested.collect {
+            onBack()
+        }
+    }
+
     LaunchedEffect(prepareIdentity) {
         viewModel.prepare(
             streamUrl = streamUrl,

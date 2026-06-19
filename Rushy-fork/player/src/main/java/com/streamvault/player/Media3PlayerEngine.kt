@@ -1777,7 +1777,7 @@ class Media3PlayerEngine @Inject constructor(
         if (!videoStallSafeRecoveryPerformed) {
             videoStallSafeRecoveryPerformed = true
             if (!shouldAttemptAutomaticRecovery(
-                    action = AutomaticRecoveryAction.FULL_REPREPARE,
+                    action = AutomaticRecoveryAction.LIVE_STALL_RECOVERY,
                     resolvedStreamType = currentResolvedStreamType,
                     playbackStarted = playbackStarted
                 )

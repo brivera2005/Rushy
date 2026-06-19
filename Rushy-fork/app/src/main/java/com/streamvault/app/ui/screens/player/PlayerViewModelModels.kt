@@ -41,7 +41,7 @@ data class SeekPreviewState(
 )
 
 data class PlayerPreferencesUiState(
-    val externalPlaybackMode: ExternalPlaybackMode = ExternalPlaybackMode.INTERNAL_PLAYER
+    val externalPlaybackMode: ExternalPlaybackMode = ExternalPlaybackMode.EXTERNAL_PLAYER
 )
 
 data class PlayerDiagnosticsUiState(
@@ -212,7 +212,9 @@ enum class PlayerNoticeAction {
     RETRY,
     LAST_CHANNEL,
     ALTERNATE_STREAM,
-    OPEN_GUIDE
+    OPEN_GUIDE,
+    OPEN_TIVIMATE,
+    OPEN_EXTERNAL_PLAYER
 }
 
 enum class AspectRatio(val modeName: String) {

@@ -29,7 +29,7 @@ import com.streamvault.domain.model.ContentType
 import com.streamvault.domain.model.DecoderMode
 import com.streamvault.domain.model.Episode
 import com.streamvault.domain.model.Favorite
-import com.streamvault.domain.model.LiveChannelObservedQuality
+import com.streamvault.domain.model.LiveTvPlayerMode
 import com.streamvault.domain.model.PlaybackHistory
 import com.streamvault.domain.model.RecordingItem
 import com.streamvault.domain.model.RecordingRecurrence
@@ -123,6 +123,9 @@ class PlayerViewModel @Inject constructor(
         private const val TOKEN_RENEWAL_CHECK_INTERVAL_MS = 10_000L
         private const val LOW_BANDWIDTH_THRESHOLD_BPS = 500_000L
         private const val LOW_BANDWIDTH_DURATION_SECONDS = 30
+        private const val LIVE_UI_STALL_THRESHOLD_MS = 12_000L
+        private const val LIVE_UI_STALL_POLL_MS = 3_000L
+        private const val LIVE_UI_STALL_RECOVERY_COOLDOWN_MS = 20_000L
         internal val PLAYBACK_TIMER_PRESETS_MINUTES = setOf(0, 15, 30, 45, 60, 90, 120)
         internal const val TIMER_TICK_MS = 1_000L
     }
@@ -244,6 +247,8 @@ class PlayerViewModel @Inject constructor(
     val playerPreferencesUiState: StateFlow<PlayerPreferencesUiState> = _playerPreferencesUiState.asStateFlow()
     private val _externalPlaybackUrl = MutableStateFlow("")
     val externalPlaybackUrl: StateFlow<String> = _externalPlaybackUrl.asStateFlow()
+    private val _playerExitRequested = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val playerExitRequested: SharedFlow<Unit> = _playerExitRequested.asSharedFlow()
 
     internal var channelInfoHideJob: Job? = null
     internal var liveOverlayHideJob: Job? = null
@@ -277,6 +282,9 @@ class PlayerViewModel @Inject constructor(
     internal var currentResolvedStreamInfo: StreamInfo? = null
     internal var pendingCatchUpUrls: List<String> = emptyList()
     internal var livePlaybackReadyForCurrentSession: Boolean = false
+    internal var liveTvPlayerMode: LiveTvPlayerMode = LiveTvPlayerMode.EXTERNAL
+    private var liveUiStallRecoveryInFlight = false
+    private var lastLiveUiStallRecoveryAtMs = 0L
     internal var channelNumberingMode: ChannelNumberingMode = ChannelNumberingMode.GROUP
         set(value) {
             field = value
@@ -667,6 +675,11 @@ class PlayerViewModel @Inject constructor(
             activePlayerEngineFlow.flatMapLatest { it.timeshiftState }.collect(::applyTimeshiftState)
         }
         viewModelScope.launch {
+            preferencesRepository.playerLiveTvPlayerMode.collect { mode ->
+                liveTvPlayerMode = mode
+            }
+        }
+        viewModelScope.launch {
             preferencesRepository.playerExternalPlaybackMode.collect { mode ->
                 _playerPreferencesUiState.value = PlayerPreferencesUiState(
                     externalPlaybackMode = mode
@@ -762,6 +775,84 @@ class PlayerViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            while (true) {
+                delay(LIVE_UI_STALL_POLL_MS)
+                monitorLivePlaybackStall()
+            }
+        }
+    }
+
+    private suspend fun monitorLivePlaybackStall() {
+        if (currentContentType != ContentType.LIVE || isCatchUpPlayback()) return
+        if (!livePlaybackReadyForCurrentSession || liveUiStallRecoveryInFlight) return
+        val playbackState = playerEngine.playbackState.value
+        if (playbackState != PlaybackState.READY && playbackState != PlaybackState.BUFFERING) return
+
+        val frameSilentMs = playerEngine.playerStats.value.lastVideoFrameAgoMs
+        if (frameSilentMs < LIVE_UI_STALL_THRESHOLD_MS) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastLiveUiStallRecoveryAtMs < LIVE_UI_STALL_RECOVERY_COOLDOWN_MS) return
+
+        liveUiStallRecoveryInFlight = true
+        lastLiveUiStallRecoveryAtMs = now
+        try {
+            handleLiveUiPlaybackStall(frameSilentMs)
+        } finally {
+            liveUiStallRecoveryInFlight = false
+        }
+    }
+
+    private suspend fun handleLiveUiPlaybackStall(frameSilentMs: Long) {
+        val requestVersion = prepareRequestVersion
+        val playbackUrl = resolvePlaybackIdentityUrl(
+            currentResolvedPlaybackUrl = currentResolvedPlaybackUrl,
+            currentStreamUrl = currentStreamUrl
+        )
+        if (!isActivePlaybackSession(requestVersion, playbackUrl)) return
+
+        android.util.Log.w(
+            "PlayerVM",
+            "live-ui-stall frameSilentMs=$frameSilentMs mode=$liveTvPlayerMode target=${playbackUrl.take(80)}"
+        )
+
+        val refreshedStreamInfo = resolvePlaybackStreamInfo(
+            logicalUrl = currentStreamUrl,
+            internalContentId = currentContentId,
+            providerId = currentProviderId,
+            contentType = currentContentType
+        )
+        if (refreshedStreamInfo != null && isActivePlaybackSession(requestVersion, playbackUrl)) {
+            appendRecoveryAction("Refreshed live URL after playback stall")
+            currentResolvedPlaybackUrl = ""
+            currentResolvedStreamInfo = null
+            if (preparePlayer(refreshedStreamInfo, requestVersion, probeBeforePlayback = false)) {
+                playerEngine.play()
+                showPlayerNotice(
+                    message = "Live playback stalled. Reconnecting with a fresh stream URL…",
+                    recoveryType = PlayerRecoveryType.BUFFER_TIMEOUT,
+                    actions = buildRecoveryActions(PlayerRecoveryType.BUFFER_TIMEOUT),
+                    isRetryNotice = true,
+                    durationMs = 8_000L
+                )
+                return
+            }
+        }
+
+        if (liveTvPlayerMode == LiveTvPlayerMode.TIVIMATE_ON_STALL &&
+            launchExternalLivePlayback(finishPlayer = true)
+        ) {
+            return
+        }
+
+        if (!isActivePlaybackSession(requestVersion, playbackUrl)) return
+        showPlayerNotice(
+            message = "Live playback froze. Try TiviMate, an external player, or another channel.",
+            recoveryType = PlayerRecoveryType.BUFFER_TIMEOUT,
+            actions = buildRecoveryActions(PlayerRecoveryType.BUFFER_TIMEOUT),
+            durationMs = 15_000L
+        )
     }
 
     private fun handlePlaybackError(error: PlayerError) {
@@ -1487,6 +1578,9 @@ class PlayerViewModel @Inject constructor(
                 currentStreamUrl = playbackLogicalUrl
                 currentContentId = playbackContentId
                 if (!isActivePlaybackSession(requestVersion, playbackLogicalUrl)) return@launch
+                if (tryDelegateLivePlaybackAtStart(liveTvPlayerMode, streamInfo.url)) return@launch
+                val providerType = providerRepository.getProvider(providerId)?.type
+                if (tryDelegateVodPlaybackAtStart(providerType, streamInfo.url)) return@launch
                 if (!preparePlayer(streamInfo, requestVersion)) return@launch
 
                 // Check for resume position after the player is fully prepared (VOD only).

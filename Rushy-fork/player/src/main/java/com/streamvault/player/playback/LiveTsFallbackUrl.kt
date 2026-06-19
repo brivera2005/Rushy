@@ -23,7 +23,8 @@ internal fun shouldFallbackMalformedHlsToLiveTs(
 internal fun shouldFallbackStalledHlsToLiveTs(
     resolvedStreamType: ResolvedStreamType,
     recoveryAttempt: Int
-): Boolean = false
+): Boolean =
+    resolvedStreamType == ResolvedStreamType.HLS && recoveryAttempt == 2
 
 internal fun buildLiveTsFallbackUrl(url: String): String? {
     val uri = runCatching { URI(url) }.getOrNull() ?: return null

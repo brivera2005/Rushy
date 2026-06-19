@@ -2,6 +2,31 @@
 
 All notable product changes are recorded in this document.
 
+## [2.4.0] - 2026-06-18
+
+### Added
+
+- **Auto external player** — Live TV now opens automatically in TiviMate (if installed), then VLC, then the Play Store VLC page. No settings required.
+- Added `ExternalPlayerRouter` with cached player availability detection on app launch, structured launch logging, and smart VOD routing (Plex → VLC; Xtream live-style `.m3u8`/`.ts` → external when a handler is installed).
+
+### Changed
+
+- Live TV never falls back to the built-in ExoPlayer by default — external playback is the default path for every channel play.
+- Existing installs that used the built-in live player are migrated to external playback automatically.
+
+## [2.3.2] - 2026-06-18
+
+### Fixed
+
+- Fixed live TV playback freezing after the first minute by allowing multiple live reconnect attempts, re-enabling HLS→MPEG-TS stall fallback, and permitting in-session stall recovery reprepares that were previously blocked to avoid extra provider connections.
+- Increased default live-stream buffer targets so ExoPlayer tolerates brief CDN gaps without entering a permanent READY-but-frozen state.
+- Added a live playback watchdog that refreshes the provider URL and can hand off to TiviMate or an external player when frames stop updating.
+
+### Added
+
+- Added **Live TV player** setting: Built-in, TiviMate, TiviMate on stall, or External player.
+- Added TiviMate deep-link launcher (`tivimate://watch?id=…`) matching legacy Rushy behavior, with recovery actions during playback errors.
+
 ## [2.3.1] - 2026-06-18
 
 ### Fixed

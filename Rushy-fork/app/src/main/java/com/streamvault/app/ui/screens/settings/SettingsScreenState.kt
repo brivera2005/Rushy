@@ -311,11 +311,22 @@ internal fun formatLiveStreamFormatModeLabel(mode: LiveStreamFormatMode): String
     LiveStreamFormatMode.MPEG_TS -> "MPEG-TS (ts)"
 }
 
+internal fun formatLiveTvPlayerModeLabel(mode: com.streamvault.domain.model.LiveTvPlayerMode, context: android.content.Context): String = when (mode) {
+    com.streamvault.domain.model.LiveTvPlayerMode.INTERNAL -> context.getString(R.string.settings_live_tv_player_internal)
+    com.streamvault.domain.model.LiveTvPlayerMode.TIVIMATE -> context.getString(R.string.settings_live_tv_player_tivimate)
+    com.streamvault.domain.model.LiveTvPlayerMode.TIVIMATE_ON_STALL -> context.getString(R.string.settings_live_tv_player_tivimate_on_stall)
+    com.streamvault.domain.model.LiveTvPlayerMode.EXTERNAL -> context.getString(R.string.settings_live_tv_player_external)
+}
+
 private fun formatExternalPlaybackModeLabel(
     mode: com.streamvault.domain.model.ExternalPlaybackMode,
     context: Context
 ): String = when (mode) {
-    com.streamvault.domain.model.ExternalPlaybackMode.INTERNAL_PLAYER -> context.getString(R.string.settings_external_playback_mode_internal)
-    com.streamvault.domain.model.ExternalPlaybackMode.ASK_EVERY_TIME -> context.getString(R.string.settings_external_playback_mode_external)
-    com.streamvault.domain.model.ExternalPlaybackMode.EXTERNAL_PLAYER -> context.getString(R.string.settings_external_playback_mode_external)
+    com.streamvault.domain.model.ExternalPlaybackMode.INTERNAL_PLAYER ->
+        context.getString(R.string.settings_external_playback_mode_internal)
+    com.streamvault.domain.model.ExternalPlaybackMode.ASK_EVERY_TIME,
+    com.streamvault.domain.model.ExternalPlaybackMode.EXTERNAL_PLAYER -> {
+        val appName = com.streamvault.app.player.external.LivePlaybackRouter.preferredExternalPlayerLabel(context)
+        context.getString(R.string.settings_external_playback_mode_external) + " · $appName"
+    }
 }

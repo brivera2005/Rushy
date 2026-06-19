@@ -79,7 +79,7 @@ data class SettingsUiState(
     val playerSurfaceMode: PlayerSurfaceMode = PlayerSurfaceMode.AUTO,
     val playerVodHttpProtocolMode: VodHttpProtocolMode = VodHttpProtocolMode.COMPATIBILITY_HTTP1,
     val playerPlaybackSpeed: Float = 1f,
-    val playerExternalPlaybackMode: ExternalPlaybackMode = ExternalPlaybackMode.INTERNAL_PLAYER,
+    val playerExternalPlaybackMode: ExternalPlaybackMode = ExternalPlaybackMode.EXTERNAL_PLAYER,
     val playerAudioVideoSyncEnabled: Boolean = false,
     val playerAudioVideoOffsetMs: Int = 0,
     val centerTwoSlotMultiviewLayout: Boolean = false,

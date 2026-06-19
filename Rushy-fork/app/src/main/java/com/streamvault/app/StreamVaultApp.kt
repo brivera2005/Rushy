@@ -13,6 +13,7 @@ import com.streamvault.app.diagnostics.RuntimeDiagnosticsManager
 import com.streamvault.app.update.GitHubReleaseChecker
 import com.streamvault.app.ui.accessibility.isReducedMotionEnabled
 import com.streamvault.app.bootstrap.RushyCredentialsBootstrap
+import com.streamvault.app.player.external.ExternalPlayerRouter
 import com.streamvault.data.remote.jellyfin.JellyfinImageAuthInterceptor
 import com.streamvault.data.preferences.PreferencesRepository
 import com.streamvault.domain.model.Result
@@ -70,6 +71,7 @@ class StreamVaultApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         CrashReportStore.install(this)
         runtimeDiagnosticsManager.start()
+        ExternalPlayerRouter.refreshAvailability(this)
         applicationScope.launch {
             providerRepository.reconcileActiveProviders()
             rushyCredentialsBootstrap.ensureDefaultCredentialsIfNeeded()

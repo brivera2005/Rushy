@@ -12,11 +12,15 @@ import java.util.Locale
 private const val PROVIDER_AUTH_RETRY_GRACE_MS = 1_200L
 
 internal fun PlayerViewModel.buildRecoveryActions(recoveryType: PlayerRecoveryType): List<PlayerNoticeAction> {
-    return buildPlayerRecoveryActions(
+    val actions = buildPlayerRecoveryActions(
         hasAlternateStream = hasAlternateStream(),
         hasLastChannel = hasLastChannel(),
         shouldOfferGuide = recoveryType == PlayerRecoveryType.CATCH_UP && currentContentType == ContentType.LIVE
-    )
+    ).toMutableList()
+    if (currentContentType == ContentType.LIVE && !isCatchUpPlayback()) {
+        actions += buildLiveExternalRecoveryActions()
+    }
+    return actions.distinct()
 }
 
 internal fun shouldAttemptProviderAuthRetry(

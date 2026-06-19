@@ -45,6 +45,19 @@ class ExternalPlayerRouterTest {
     }
 
     @Test
+    fun `buildTiviMateDirectUrlIntent omits package when unrestricted`() {
+        val intent = checkNotNull(
+            ExternalPlayerRouter.buildTiviMateDirectUrlIntent(
+                "https://cdn.example.com/live/1.ts",
+                restrictPackage = false,
+            ),
+        )
+        assertThat(intent.`package`).isNull()
+        assertThat(intent.data.toString()).isEqualTo("https://cdn.example.com/live/1.ts")
+    }
+
+    @Test
+    fun `buildPackageViewIntent returns null for blank URL`() {
         assertThat(ExternalPlayerRouter.buildPackageViewIntent("  ", ExternalPlayerRouter.VLC_PACKAGE)).isNull()
     }
 

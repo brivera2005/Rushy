@@ -126,6 +126,18 @@ object ExternalPlayerRouter {
                         return PlayResult.Success(ExternalPlayerTarget.TIVIMATE, request.title)
                     }
                 }
+
+                Toast.makeText(
+                    context.applicationContext,
+                    "Opening TiviMate…",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                buildTiviMateDirectUrlIntent(playbackUrl, restrictPackage = false)?.let { intent ->
+                    if (tryStartActivity(context, intent)) {
+                        logLaunch(ExternalPlayerTarget.TIVIMATE, request.title, request.streamId)
+                        return PlayResult.Success(ExternalPlayerTarget.TIVIMATE, request.title)
+                    }
+                }
             }
         }
 
@@ -220,13 +232,13 @@ object ExternalPlayerRouter {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
-    /** Legacy Rushy TiviMate handoff: ACTION_VIEW + package + stream URL (no MIME type). */
-    fun buildTiviMateDirectUrlIntent(url: String): Intent? {
+    /** Legacy Rushy TiviMate handoff: ACTION_VIEW + optional package + stream URL (no MIME type). */
+    fun buildTiviMateDirectUrlIntent(url: String, restrictPackage: Boolean = true): Intent? {
         val trimmed = url.trim()
         if (trimmed.isBlank()) return null
         if (!ExternalPlayerLauncher.isExternalPlayerLaunchUrl(trimmed)) return null
         return Intent(Intent.ACTION_VIEW).apply {
-            setPackage(TIVIMATE_PACKAGE)
+            if (restrictPackage) setPackage(TIVIMATE_PACKAGE)
             data = Uri.parse(trimmed)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }

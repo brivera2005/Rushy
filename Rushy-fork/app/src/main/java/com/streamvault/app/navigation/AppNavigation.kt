@@ -36,7 +36,6 @@ import com.streamvault.app.ui.screens.downloads.DownloadsScreen
 import com.streamvault.app.MainActivity
 import com.streamvault.app.player.external.launchExternalLivePlayer as startExternalLivePlayback
 import com.streamvault.domain.model.AppLandingDestination
-import com.streamvault.domain.model.LiveTvPlayerMode
 import com.streamvault.data.remote.xtream.XtreamUrlFactory
 import com.streamvault.domain.model.AppTopLevelDestination
 import com.streamvault.domain.model.MovieDetailPresentationHint
@@ -270,13 +269,10 @@ private fun NavHostController.navigateToInternalPlayer(request: PlayerNavigation
     return true
 }
 
-private fun shouldRouteLiveTvToExternalPlayer(
-    request: PlayerNavigationRequest,
-    liveTvPlayerMode: LiveTvPlayerMode,
-): Boolean {
+private fun shouldRouteLiveTvToExternalPlayer(request: PlayerNavigationRequest): Boolean {
     if (!request.contentType.equals("LIVE", ignoreCase = true)) return false
     if (request.archiveStartMs != null || request.archiveEndMs != null) return false
-    return liveTvPlayerMode != LiveTvPlayerMode.INTERNAL
+    return true
 }
 
 private fun launchExternalLivePlayer(
@@ -328,11 +324,10 @@ private fun NavHostController.navigateToExternalPlayer(
     request: PlayerNavigationRequest,
     context: android.content.Context,
     channelRepository: ChannelRepository,
-    liveTvPlayerMode: LiveTvPlayerMode,
     scope: kotlinx.coroutines.CoroutineScope,
 ): Boolean {
     if (currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != true) return false
-    if (shouldRouteLiveTvToExternalPlayer(request, liveTvPlayerMode)) {
+    if (shouldRouteLiveTvToExternalPlayer(request)) {
         launchExternalLivePlayer(context, channelRepository, request, scope)
         return true
     }
@@ -378,12 +373,9 @@ fun AppNavigation(mainActivity: MainActivity) {
         preferred = appLandingDestination,
         destinations = topLevelDestinations
     ).toAppRoute()
-    val liveTvPlayerMode = mainActivity.preferencesRepository.playerLiveTvPlayerMode
-        .collectAsStateWithLifecycle(initialValue = LiveTvPlayerMode.TIVIMATE_ALWAYS)
-        .value
 
     fun navigateToPlayer(request: PlayerNavigationRequest): Boolean {
-        if (shouldRouteLiveTvToExternalPlayer(request, liveTvPlayerMode)) {
+        if (shouldRouteLiveTvToExternalPlayer(request)) {
             launchExternalLivePlayer(mainActivity, mainActivity.channelRepository, request, scope)
             return true
         }
@@ -400,7 +392,6 @@ fun AppNavigation(mainActivity: MainActivity) {
                         request = request.request,
                         context = mainActivity,
                         channelRepository = mainActivity.channelRepository,
-                        liveTvPlayerMode = liveTvPlayerMode,
                         scope = scope,
                     )
                 ) {

@@ -6,7 +6,7 @@ All notable product changes are recorded in this document.
 
 ### Fixed
 
-- Live channel taps now always hand off to TiviMate using the legacy Rushy intent (`ACTION_VIEW` + `ar.tvplayer.tv` + `tivimate://watch?id=…` or direct `.ts` URL) and never open the built-in player.
+- Live channel taps always hand off to TiviMate using the legacy Rushy intent (`ACTION_VIEW` + `ar.tvplayer.tv` + `tivimate://watch?id=…` or direct `.ts` URL) and never open the built-in player.
 - Fixed wrong Xtream stream IDs being sent to TiviMate (internal DB ids were used instead of provider stream ids).
 - Rushy finishes after launching TiviMate so playback stays in the external player foreground.
 

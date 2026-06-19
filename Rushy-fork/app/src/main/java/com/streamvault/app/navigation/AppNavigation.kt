@@ -356,7 +356,7 @@ fun AppNavigation(mainActivity: MainActivity) {
         destinations = topLevelDestinations
     ).toAppRoute()
     val liveTvPlayerMode = mainActivity.preferencesRepository.playerLiveTvPlayerMode
-        .collectAsStateWithLifecycle(initialValue = LiveTvPlayerMode.EXTERNAL)
+        .collectAsStateWithLifecycle(initialValue = LiveTvPlayerMode.INTERNAL)
         .value
 
     fun navigateToPlayer(request: PlayerNavigationRequest): Boolean {

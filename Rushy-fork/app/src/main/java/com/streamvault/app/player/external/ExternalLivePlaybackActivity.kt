@@ -10,18 +10,30 @@ import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.streamvault.app.navigation.PlayerNavigationRequest
 import com.streamvault.domain.repository.ChannelRepository
-import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.launch
 
 /**
  * Resolves a live channel stream URL and launches it in an external player.
  * Never falls back to the in-app ExoPlayer — opens Play Store for VLC when needed.
  */
-@AndroidEntryPoint
 class ExternalLivePlaybackActivity : ComponentActivity() {
-    @Inject
-    lateinit var channelRepository: ChannelRepository
+
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface ExternalLivePlaybackEntryPoint {
+        fun channelRepository(): ChannelRepository
+    }
+
+    private val channelRepository: ChannelRepository by lazy {
+        EntryPointAccessors.fromApplication(
+            applicationContext,
+            ExternalLivePlaybackEntryPoint::class.java,
+        ).channelRepository()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

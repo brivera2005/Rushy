@@ -13,7 +13,6 @@ jobs:
       version_name: ${{ steps.app_version.outputs.version_name }}
       version_code: ${{ steps.app_version.outputs.version_code }}
       release_tag: ${{ steps.app_version.outputs.release_tag }}
-      apk_name: ${{ steps.app_version.outputs.apk_name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +32,6 @@ jobs:
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "release_tag=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "apk_name=StreamVault-$VERSION_NAME.apk" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -67,6 +65,33 @@ jobs:
             echo "No signing secrets configured. Building unsigned release APK."
           fi
 
+      - name: Generate DefaultCredentials from secrets
+        shell: bash
+        env:
+          RUSHY_XTREAM_PORTAL: ${{ secrets.RUSHY_XTREAM_PORTAL }}
+          RUSHY_XTREAM_USER: ${{ secrets.RUSHY_XTREAM_USER }}
+          RUSHY_XTREAM_PASS: ${{ secrets.RUSHY_XTREAM_PASS }}
+          RUSHY_PLEX_URL: ${{ secrets.RUSHY_PLEX_URL }}
+          RUSHY_PLEX_TOKEN: ${{ secrets.RUSHY_PLEX_TOKEN }}
+          RUSHY_RADARR_URL: ${{ secrets.RUSHY_RADARR_URL }}
+          RUSHY_RADARR_API_KEY: ${{ secrets.RUSHY_RADARR_API_KEY }}
+          RUSHY_SONARR_URL: ${{ secrets.RUSHY_SONARR_URL }}
+          RUSHY_SONARR_API_KEY: ${{ secrets.RUSHY_SONARR_API_KEY }}
+          RUSHY_AUTO_APPLY: ${{ secrets.RUSHY_AUTO_APPLY }}
+        run: |
+          chmod +x scripts/ci/generate-default-credentials.sh
+          bash scripts/ci/generate-default-credentials.sh
+
+      - name: Prepare local.properties for release build
+        shell: bash
+        env:
+          RUSHY_GEMINI_API_KEY: ${{ secrets.RUSHY_GEMINI_API_KEY }}
+        run: |
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          if [ -n "$RUSHY_GEMINI_API_KEY" ]; then
+            printf 'gemini.api.key=%s\n' "$RUSHY_GEMINI_API_KEY" >> local.properties
+          fi
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
@@ -86,12 +111,12 @@ jobs:
             echo "No release APK produced."
             exit 1
           fi
-          cp "$APK_PATH" "dist/${{ steps.app_version.outputs.apk_name }}"
-          cp "$APK_PATH" dist/StreamVault.apk
           cp "$APK_PATH" dist/rushy.apk
-          printf '{"versionName":"%s","versionCode":%s}\n' \
+          APK_SHA256=$(sha256sum dist/rushy.apk | awk '{print $1}')
+          printf '{"versionName":"%s","versionCode":%s,"apkSha256":"%s"}\n' \
             "${{ steps.app_version.outputs.version_name }}" \
             "${{ steps.app_version.outputs.version_code }}" \
+            "$APK_SHA256" \
             > dist/version.json
 
       - name: Upload release APK artifact
@@ -100,8 +125,6 @@ jobs:
         with:
           name: release-apk
           path: |
-            dist/${{ steps.app_version.outputs.apk_name }}
-            dist/StreamVault.apk
             dist/rushy.apk
             dist/version.json
 
@@ -153,7 +176,6 @@ jobs:
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "release_tag=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "apk_name=StreamVault-$VERSION_NAME.apk" >> "$GITHUB_OUTPUT"
 
       - name: Extract changelog entry
         id: changelog
@@ -178,15 +200,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.app_version.outputs.release_tag }}
-          name: StreamVault ${{ steps.app_version.outputs.version_name }}
+          name: Rushy ${{ steps.app_version.outputs.version_name }}
           body: |
             ${{ steps.changelog.outputs.notes }}
             
             ---
             Built from `${{ github.sha }}`.
           files: |
-            dist/${{ steps.app_version.outputs.apk_name }}
-            dist/StreamVault.apk
             dist/rushy.apk
             dist/version.json
           make_latest: true

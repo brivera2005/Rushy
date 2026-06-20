@@ -39,14 +39,31 @@ jobs:
         with:
           cache-disabled: true
 
-      - name: Prepare DefaultCredentials for CI
+      - name: Generate DefaultCredentials from secrets
         shell: bash
+        env:
+          RUSHY_XTREAM_PORTAL: ${{ secrets.RUSHY_XTREAM_PORTAL }}
+          RUSHY_XTREAM_USER: ${{ secrets.RUSHY_XTREAM_USER }}
+          RUSHY_XTREAM_PASS: ${{ secrets.RUSHY_XTREAM_PASS }}
+          RUSHY_PLEX_URL: ${{ secrets.RUSHY_PLEX_URL }}
+          RUSHY_PLEX_TOKEN: ${{ secrets.RUSHY_PLEX_TOKEN }}
+          RUSHY_RADARR_URL: ${{ secrets.RUSHY_RADARR_URL }}
+          RUSHY_RADARR_API_KEY: ${{ secrets.RUSHY_RADARR_API_KEY }}
+          RUSHY_SONARR_URL: ${{ secrets.RUSHY_SONARR_URL }}
+          RUSHY_SONARR_API_KEY: ${{ secrets.RUSHY_SONARR_API_KEY }}
+          RUSHY_AUTO_APPLY: ${{ secrets.RUSHY_AUTO_APPLY }}
         run: |
-          EXAMPLE=app/src/main/java/com/streamvault/app/DefaultCredentials.kt.example
-          TARGET=app/src/main/java/com/streamvault/app/DefaultCredentials.kt
-          if [ ! -f "$TARGET" ]; then
-            test -f "$EXAMPLE"
-            cp "$EXAMPLE" "$TARGET"
+          chmod +x scripts/ci/generate-default-credentials.sh
+          bash scripts/ci/generate-default-credentials.sh
+
+      - name: Prepare local.properties for release build
+        shell: bash
+        env:
+          RUSHY_GEMINI_API_KEY: ${{ secrets.RUSHY_GEMINI_API_KEY }}
+        run: |
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          if [ -n "$RUSHY_GEMINI_API_KEY" ]; then
+            printf 'gemini.api.key=%s\n' "$RUSHY_GEMINI_API_KEY" >> local.properties
           fi
 
       - name: Prepare optional signing files
@@ -83,7 +100,11 @@ jobs:
           APK_PATH=$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)
           test -n "$APK_PATH"
           cp "$APK_PATH" dist/rushy.apk
-          cp version.json dist/version.json
+          VERSION_NAME=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          VERSION_CODE=$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
+          APK_SHA256=$(sha256sum dist/rushy.apk | awk '{print $1}')
+          printf '{"versionName":"%s","versionCode":%s,"apkSha256":"%s"}\n' \
+            "$VERSION_NAME" "$VERSION_CODE" "$APK_SHA256" > dist/version.json
 
       - uses: actions/upload-artifact@v4
         with:

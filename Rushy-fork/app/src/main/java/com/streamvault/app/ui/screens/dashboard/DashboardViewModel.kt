@@ -7,6 +7,8 @@ import com.streamvault.app.ui.model.orderedByRequestedRawIds
 import com.streamvault.data.preferences.PreferencesRepository
 import com.streamvault.data.sync.SyncManager
 import com.streamvault.app.update.AppUpdateInstaller
+import com.streamvault.app.update.InstalledAppVersion
+import com.streamvault.app.ui.screens.settings.isRemoteVersionNewer
 import com.streamvault.domain.model.ActiveLiveSource
 import com.streamvault.domain.model.AppHomeDashboardShelf
 import com.streamvault.domain.model.Category
@@ -51,6 +53,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import com.streamvault.domain.util.AdultContentVisibilityPolicy
@@ -653,17 +656,21 @@ class DashboardViewModel @Inject constructor(
     private fun observeUpdateNotice(): Flow<DashboardUpdateNotice?> = combine(
         preferencesRepository.cachedAppUpdateVersionName,
         preferencesRepository.cachedAppUpdateVersionCode,
-        preferencesRepository.downloadedAppUpdateVersionName
-    ) { latestVersionName, latestVersionCode, downloadedVersionName ->
+        preferencesRepository.cachedAppUpdatePublishedAt,
+        preferencesRepository.downloadedAppUpdateVersionName,
+    ) { latestVersionName, latestVersionCode, latestPublishedAt, downloadedVersionName ->
         if (latestVersionName.isNullOrBlank()) {
             return@combine null
         }
 
-        val updateAvailable = if (latestVersionCode != null && latestVersionCode > BuildConfig.VERSION_CODE) {
-            true
-        } else {
-            compareVersionNames(latestVersionName, BuildConfig.VERSION_NAME) > 0
-        }
+        val installed = InstalledAppVersion.read(appContext)
+        val updateAvailable = isRemoteVersionNewer(
+            remoteVersionCode = latestVersionCode,
+            remoteVersionName = latestVersionName,
+            remotePublishedAt = latestPublishedAt,
+            installedVersionCode = installed.versionCode,
+            installedVersionName = installed.versionName,
+        )
 
         if (!updateAvailable) {
             return@combine null
@@ -828,7 +835,8 @@ class DashboardViewModel @Inject constructor(
 
     fun installDownloadedUpdate() {
         viewModelScope.launch {
-            when (val result = appUpdateInstaller.installDownloadedUpdate()) {
+            val expectedSha256 = preferencesRepository.cachedAppUpdateApkSha256.first()
+            when (val result = appUpdateInstaller.installDownloadedUpdate(expectedSha256)) {
                 is com.streamvault.domain.model.Result.Error -> {
                     _uiState.value = _uiState.value.copy(userMessage = result.message)
                 }

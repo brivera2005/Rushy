@@ -17,9 +17,6 @@ internal fun PlayerViewModel.buildRecoveryActions(recoveryType: PlayerRecoveryTy
         hasLastChannel = hasLastChannel(),
         shouldOfferGuide = recoveryType == PlayerRecoveryType.CATCH_UP && currentContentType == ContentType.LIVE
     ).toMutableList()
-    if (currentContentType == ContentType.LIVE && !isCatchUpPlayback()) {
-        actions += buildLiveExternalRecoveryActions()
-    }
     return actions.distinct()
 }
 

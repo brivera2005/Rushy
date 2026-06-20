@@ -29,7 +29,10 @@ data class Series(
     val variants: List<VodSeriesVariant> = emptyList(),
     val duplicateConfidence: VodDuplicateConfidence = VodDuplicateConfidence.NONE,
     val variantLabel: String? = null,
-    val catalogSource: CatalogSource? = null
+    val catalogSource: CatalogSource? = null,
+    val plexAvailability: PlexAvailability? = null,
+    val plexDiscoverRatingKey: String? = null,
+    val plexHasPlayableEpisodes: Boolean? = null
 ) {
     init {
         require(rating in 0f..10f) { "rating must be between 0 and 10" }

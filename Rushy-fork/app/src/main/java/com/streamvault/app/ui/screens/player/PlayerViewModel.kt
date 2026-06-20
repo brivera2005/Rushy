@@ -363,6 +363,7 @@ class PlayerViewModel @Inject constructor(
     internal var stopPlaybackTimerJob: Job? = null
     internal var idleStandbyTimerJob: Job? = null
     internal var zapOverlayJob: Job? = null
+    internal var liveZapJob: Job? = null
     internal var aspectRatioJob: Job? = null
     internal var zapBufferWatchdogJob: Job? = null
     internal var autoPlayCountdownJob: Job? = null
@@ -845,15 +846,9 @@ class PlayerViewModel @Inject constructor(
             }
         }
 
-        if (liveTvPlayerMode == LiveTvPlayerMode.TIVIMATE_ON_STALL &&
-            launchExternalLivePlayback(finishPlayer = true)
-        ) {
-            return
-        }
-
         if (!isActivePlaybackSession(requestVersion, playbackUrl)) return
         showPlayerNotice(
-            message = "Live playback froze. Try TiviMate, an external player, or another channel.",
+            message = "Live playback froze. Reconnecting or try another channel.",
             recoveryType = PlayerRecoveryType.BUFFER_TIMEOUT,
             actions = buildRecoveryActions(PlayerRecoveryType.BUFFER_TIMEOUT),
             durationMs = 15_000L

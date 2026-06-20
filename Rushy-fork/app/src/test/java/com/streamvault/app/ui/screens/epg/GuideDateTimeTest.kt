@@ -54,4 +54,37 @@ class GuideDateTimeTest {
 
         assertThat(shiftedLocalDate).isEqualTo(LocalDate.of(2026, 3, 9))
     }
+
+    @Test
+    fun `guide timeline markers align to local half hours`() {
+        val zoneId = ZoneId.of("Asia/Kathmandu")
+        val windowStart = LocalDateTime.of(2026, 5, 2, 12, 17)
+            .atZone(zoneId)
+            .toInstant()
+            .toEpochMilli()
+        val windowEnd = LocalDateTime.of(2026, 5, 2, 14, 5)
+            .atZone(zoneId)
+            .toInstant()
+            .toEpochMilli()
+
+        val markers = guideTimelineMarkers(
+            windowStart = windowStart,
+            windowEnd = windowEnd,
+            stepMs = EpgViewModel.HALF_HOUR_SHIFT_MS,
+            zoneId = zoneId
+        )
+
+        assertThat(markers).isNotEmpty()
+        markers.forEach { marker ->
+            val localTime = Instant.ofEpochMilli(marker).atZone(zoneId).toLocalTime()
+            assertThat(localTime.minute % 30).isEqualTo(0)
+            assertThat(localTime.second).isEqualTo(0)
+        }
+        assertThat(markers.first()).isEqualTo(
+            LocalDateTime.of(2026, 5, 2, 12, 0)
+                .atZone(zoneId)
+                .toInstant()
+                .toEpochMilli()
+        )
+    }
 }

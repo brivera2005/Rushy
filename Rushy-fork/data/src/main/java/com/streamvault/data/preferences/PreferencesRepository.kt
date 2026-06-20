@@ -151,6 +151,7 @@ class PreferencesRepository @Inject constructor(
         val PLAYER_PLAYBACK_BUFFER_MODE = stringPreferencesKey("player_playback_buffer_mode")
         val PLAYER_LIVE_STREAM_FORMAT_MODE = stringPreferencesKey("player_live_stream_format_mode")
         val PLAYER_LIVE_TV_PLAYER_MODE = stringPreferencesKey("player_live_tv_player_mode")
+        val LIVE_TV_PLAYER_V246_MIGRATED = booleanPreferencesKey("live_tv_player_v246_migrated")
         val PLAYER_VOD_HTTP_PROTOCOL_MODE = stringPreferencesKey("player_vod_http_protocol_mode")
         val LEGACY_PLAYER_MOVIE_HTTP_PROTOCOL_MODE = stringPreferencesKey("player_movie_http_protocol_mode")
         val PLAYER_AUDIO_OUTPUT_PREFERENCE = stringPreferencesKey("player_audio_output_preference")
@@ -206,6 +207,7 @@ class PreferencesRepository @Inject constructor(
         val APP_UPDATE_DOWNLOAD_URL = stringPreferencesKey("app_update_download_url")
         val APP_UPDATE_RELEASE_NOTES = stringPreferencesKey("app_update_release_notes")
         val APP_UPDATE_PUBLISHED_AT = stringPreferencesKey("app_update_published_at")
+        val APP_UPDATE_APK_SHA256 = stringPreferencesKey("app_update_apk_sha256")
         val LAST_MAINTENANCE_AT = longPreferencesKey("last_maintenance_at")
         val LAST_MAINTENANCE_DELETED_PROGRAMS = intPreferencesKey("last_maintenance_deleted_programs")
         val LAST_MAINTENANCE_DELETED_EXTERNAL_PROGRAMMES = intPreferencesKey("last_maintenance_deleted_external_programmes")
@@ -634,6 +636,10 @@ class PreferencesRepository @Inject constructor(
         preferences[PreferencesKeys.APP_UPDATE_PUBLISHED_AT]?.takeIf { it.isNotBlank() }
     }
 
+    val cachedAppUpdateApkSha256: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.APP_UPDATE_APK_SHA256]?.takeIf { it.isNotBlank() }
+    }
+
     val lastMaintenanceSnapshot: Flow<DatabaseMaintenanceSnapshot?> = context.dataStore.data.map { preferences ->
         val ranAt = preferences[PreferencesKeys.LAST_MAINTENANCE_AT] ?: return@map null
         DatabaseMaintenanceSnapshot(
@@ -794,7 +800,8 @@ class PreferencesRepository @Inject constructor(
         releaseUrl: String?,
         downloadUrl: String?,
         releaseNotes: String?,
-        publishedAt: String?
+        publishedAt: String?,
+        apkSha256: String? = null,
     ) {
         context.dataStore.edit { preferences ->
             if (versionName.isNullOrBlank() || releaseUrl.isNullOrBlank()) {
@@ -804,6 +811,7 @@ class PreferencesRepository @Inject constructor(
                 preferences.remove(PreferencesKeys.APP_UPDATE_DOWNLOAD_URL)
                 preferences.remove(PreferencesKeys.APP_UPDATE_RELEASE_NOTES)
                 preferences.remove(PreferencesKeys.APP_UPDATE_PUBLISHED_AT)
+                preferences.remove(PreferencesKeys.APP_UPDATE_APK_SHA256)
             } else {
                 preferences[PreferencesKeys.APP_UPDATE_LATEST_VERSION_NAME] = versionName
                 if (versionCode == null) {
@@ -826,6 +834,11 @@ class PreferencesRepository @Inject constructor(
                     preferences.remove(PreferencesKeys.APP_UPDATE_PUBLISHED_AT)
                 } else {
                     preferences[PreferencesKeys.APP_UPDATE_PUBLISHED_AT] = publishedAt
+                }
+                if (apkSha256.isNullOrBlank()) {
+                    preferences.remove(PreferencesKeys.APP_UPDATE_APK_SHA256)
+                } else {
+                    preferences[PreferencesKeys.APP_UPDATE_APK_SHA256] = apkSha256
                 }
             }
         }
@@ -934,20 +947,21 @@ class PreferencesRepository @Inject constructor(
     }
 
     /**
-     * One-shot migration: v2.4.1 forced TiviMate for every install. Restore built-in player
-     * unless the user explicitly chose another mode after that change.
+     * One-shot migration: restore built-in ExoPlayer for live TV. External/TiviMate modes
+     * consume a second provider connection and can lock out single-connection playlists.
      */
-    suspend fun migrateLiveTvPlayerModeToTiviMateAlways() {
+    suspend fun migrateLiveTvPlayerModeToBuiltIn() {
         context.dataStore.edit { preferences ->
-            val saved = preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE]
-            if (saved.equals(
-                    com.streamvault.domain.model.LiveTvPlayerMode.TIVIMATE_ALWAYS.storageValue,
-                    ignoreCase = true,
-                )
-            ) {
-                preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE] =
-                    com.streamvault.domain.model.LiveTvPlayerMode.INTERNAL.storageValue
+            if (preferences[PreferencesKeys.LIVE_TV_PLAYER_V246_MIGRATED] == true) return@edit
+            val saved = preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE]?.trim().orEmpty()
+            if (saved.isNotBlank()) {
+                val mode = com.streamvault.domain.model.LiveTvPlayerMode.fromStorageValue(saved)
+                if (mode != com.streamvault.domain.model.LiveTvPlayerMode.INTERNAL) {
+                    preferences[PreferencesKeys.PLAYER_LIVE_TV_PLAYER_MODE] =
+                        com.streamvault.domain.model.LiveTvPlayerMode.INTERNAL.storageValue
+                }
             }
+            preferences[PreferencesKeys.LIVE_TV_PLAYER_V246_MIGRATED] = true
         }
     }
 

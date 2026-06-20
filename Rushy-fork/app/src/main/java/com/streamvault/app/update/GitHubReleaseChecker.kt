@@ -30,7 +30,8 @@ data class GitHubReleaseInfo(
     val releaseUrl: String,
     val downloadUrl: String?,
     val releaseNotes: String,
-    val publishedAt: String?
+    val publishedAt: String?,
+    val apkSha256: String? = null,
 )
 
 @Singleton
@@ -95,7 +96,8 @@ class GitHubReleaseChecker @Inject constructor(
                         releaseUrl = releaseUrl,
                         downloadUrl = downloadUrl,
                         releaseNotes = notes,
-                        publishedAt = json.optString("published_at").takeIf { it.isNotBlank() }
+                        publishedAt = json.optString("published_at").takeIf { it.isNotBlank() },
+                        apkSha256 = parsedVersion.apkSha256,
                     )
                 )
             }
@@ -157,7 +159,6 @@ class GitHubReleaseChecker @Inject constructor(
 
     private fun findApkAssetUrl(assets: org.json.JSONArray?, updateChannel: AppUpdateChannel): String? {
         if (assets == null) return null
-        var fallback: String? = null
         for (index in 0 until assets.length()) {
             val asset = assets.optJSONObject(index) ?: continue
             val name = asset.optString("name")
@@ -171,27 +172,15 @@ class GitHubReleaseChecker @Inject constructor(
                     ) {
                         return url
                     }
-                    if (fallback == null &&
-                        name.endsWith(".apk", ignoreCase = true) &&
-                        !name.contains("beta", ignoreCase = true)
-                    ) {
-                        fallback = url
-                    }
                 }
                 AppUpdateChannel.Beta -> {
                     if (name.equals("rushy-beta.apk", ignoreCase = true)) {
                         return url
                     }
-                    if (fallback == null &&
-                        name.endsWith(".apk", ignoreCase = true) &&
-                        name.contains("beta", ignoreCase = true)
-                    ) {
-                        fallback = url
-                    }
                 }
             }
         }
-        return fallback
+        return null
     }
 
     private fun resolveVersionInfo(
@@ -199,24 +188,38 @@ class GitHubReleaseChecker @Inject constructor(
         releaseBody: String,
         assets: org.json.JSONArray?,
     ): ParsedTagVersion? {
+        val tagVersion = parseTagVersionInfo(tagName)
         findVersionJsonAssetUrl(assets)?.let { versionJsonUrl ->
             parseVersionJson(fetchAssetText(versionJsonUrl))?.let { versionInfo ->
-                return ParsedTagVersion(
-                    versionName = versionInfo.versionName,
-                    versionCode = versionInfo.versionCode,
-                )
+                if (versionNamesCompatible(versionInfo.versionName, tagVersion.versionName)) {
+                    return ParsedTagVersion(
+                        versionName = versionInfo.versionName,
+                        versionCode = versionInfo.versionCode,
+                        apkSha256 = versionInfo.apkSha256,
+                    )
+                }
             }
         }
 
         parseVersionCodeFromBody(releaseBody)?.let { versionCode ->
-            val versionName = parseTagVersionInfo(tagName).versionName
+            val versionName = tagVersion.versionName
             if (versionName.isNotBlank()) {
-                return ParsedTagVersion(versionName = versionName, versionCode = versionCode)
+                return ParsedTagVersion(
+                    versionName = versionName,
+                    versionCode = versionCode,
+                    apkSha256 = null,
+                )
             }
         }
 
-        val parsedTag = parseTagVersionInfo(tagName)
-        return parsedTag.versionName.takeIf { it.isNotBlank() }?.let { parsedTag }
+        return tagVersion.versionName.takeIf { it.isNotBlank() }?.let { tagVersion }
+    }
+
+    private fun versionNamesCompatible(jsonVersionName: String, tagVersionName: String): Boolean {
+        val normalizedJson = jsonVersionName.removePrefix("v").trim()
+        val normalizedTag = tagVersionName.removePrefix("v").trim()
+        if (normalizedJson.isBlank() || normalizedTag.isBlank()) return false
+        return normalizedJson.equals(normalizedTag, ignoreCase = true)
     }
 
     private fun findVersionJsonAssetUrl(assets: org.json.JSONArray?): String? {
@@ -246,8 +249,15 @@ class GitHubReleaseChecker @Inject constructor(
             val parsed = JSONObject(json)
             val versionCode = parsed.optInt("versionCode", -1)
             val versionName = parsed.optString("versionName").trim()
+            val apkSha256 = parsed.optString("apkSha256").trim()
+                .ifBlank { parsed.optString("sha256").trim() }
+                .ifBlank { null }
             if (versionCode > 0 && versionName.isNotBlank()) {
-                ParsedTagVersion(versionName = versionName, versionCode = versionCode)
+                ParsedTagVersion(
+                    versionName = versionName,
+                    versionCode = versionCode,
+                    apkSha256 = apkSha256,
+                )
             } else {
                 null
             }
@@ -265,13 +275,15 @@ class GitHubReleaseChecker @Inject constructor(
         if (structuredMatch != null) {
             return ParsedTagVersion(
                 versionName = structuredMatch.groupValues[1].trim(),
-                versionCode = structuredMatch.groupValues[2].toIntOrNull()
+                versionCode = structuredMatch.groupValues[2].toIntOrNull(),
+                apkSha256 = null,
             )
         }
 
         return ParsedTagVersion(
             versionName = normalizedTag.removePrefix("v").trim(),
-            versionCode = null
+            versionCode = null,
+            apkSha256 = null,
         )
     }
 
@@ -306,5 +318,6 @@ enum class AppUpdateChannel(val id: String, val releaseApiUrl: String) {
 
 private data class ParsedTagVersion(
     val versionName: String,
-    val versionCode: Int?
+    val versionCode: Int?,
+    val apkSha256: String? = null,
 )

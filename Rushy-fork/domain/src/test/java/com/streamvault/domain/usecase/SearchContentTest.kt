@@ -6,6 +6,7 @@ import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Movie
 import com.streamvault.domain.model.Series
 import com.streamvault.domain.model.SyncState
+import com.streamvault.domain.repository.PlexSearchEnricher
 import com.streamvault.domain.repository.ProviderRepository
 import com.streamvault.domain.repository.SearchRepository
 import com.streamvault.domain.repository.SearchRepositoryResult
@@ -24,18 +25,29 @@ import org.junit.Test
 class SearchContentTest {
 
     private val passthroughInterpreter = PassthroughNaturalLanguageSearchInterpreter()
+    private val passthroughEnricher = FakePlexSearchEnricher()
+
+    private fun searchContent(
+        searchRepository: SearchRepository,
+        providerRepository: ProviderRepository = SearchFakeProviderRepository(),
+        providerSyncStateReader: ProviderSyncStateReader = FakeProviderSyncStateReader(),
+        naturalLanguageSearchInterpreter: NaturalLanguageSearchInterpreter = passthroughInterpreter,
+    ) = SearchContent(
+        searchRepository = searchRepository,
+        providerRepository = providerRepository,
+        providerSyncStateReader = providerSyncStateReader,
+        naturalLanguageSearchInterpreter = naturalLanguageSearchInterpreter,
+        plexSearchEnricher = passthroughEnricher,
+    )
 
     @Test
     fun returnsCombinedResultsAcrossAllSections() = runTest {
-        val useCase = SearchContent(
+        val useCase = searchContent(
             searchRepository = FakeSearchRepository(
                 channelResults = listOf(Channel(id = 1L, name = "News 1")),
                 movieResults = listOf(Movie(id = 2L, name = "Movie 1")),
                 seriesResults = listOf(Series(id = 3L, name = "Series 1"))
             ),
-            providerRepository = FakeProviderRepository(),
-            providerSyncStateReader = FakeProviderSyncStateReader(),
-            naturalLanguageSearchInterpreter = passthroughInterpreter
         )
 
         val result = useCase(providerId = 99L, query = "star").first()
@@ -47,15 +59,12 @@ class SearchContentTest {
 
     @Test
     fun restrictsResultsToRequestedScope() = runTest {
-        val useCase = SearchContent(
+        val useCase = searchContent(
             searchRepository = FakeSearchRepository(
                 channelResults = listOf(Channel(id = 1L, name = "News 1")),
                 movieResults = listOf(Movie(id = 2L, name = "Movie 1")),
                 seriesResults = listOf(Series(id = 3L, name = "Series 1"))
             ),
-            providerRepository = FakeProviderRepository(),
-            providerSyncStateReader = FakeProviderSyncStateReader(),
-            naturalLanguageSearchInterpreter = passthroughInterpreter
         )
 
         val result = useCase(
@@ -71,15 +80,12 @@ class SearchContentTest {
 
     @Test
     fun shortQueriesReturnEmptyResults() = runTest {
-        val useCase = SearchContent(
+        val useCase = searchContent(
             searchRepository = FakeSearchRepository(
                 channelResults = listOf(Channel(id = 1L, name = "News 1")),
                 movieResults = listOf(Movie(id = 2L, name = "Movie 1")),
                 seriesResults = listOf(Series(id = 3L, name = "Series 1"))
             ),
-            providerRepository = FakeProviderRepository(),
-            providerSyncStateReader = FakeProviderSyncStateReader(),
-            naturalLanguageSearchInterpreter = passthroughInterpreter
         )
 
         val result = useCase(providerId = 99L, query = "a").first()
@@ -91,10 +97,9 @@ class SearchContentTest {
 
     @Test
     fun marksSearchPartialWhileProviderSyncIsActive() = runTest {
-        val useCase = SearchContent(
+        val useCase = searchContent(
             searchRepository = FakeSearchRepository(movieResults = listOf(Movie(id = 2L, name = "Movie 1"))),
             providerSyncStateReader = FakeProviderSyncStateReader(SyncState.Syncing("Indexing movies")),
-            naturalLanguageSearchInterpreter = passthroughInterpreter
         )
 
         val result = useCase(providerId = 99L, query = "movie", scope = SearchContentScope.MOVIES).first()
@@ -105,10 +110,9 @@ class SearchContentTest {
 
     @Test
     fun marksSearchPartialWhileBackgroundIndexJobIsActive() = runTest {
-        val useCase = SearchContent(
+        val useCase = searchContent(
             searchRepository = FakeSearchRepository(movieResults = listOf(Movie(id = 2L, name = "Movie 1"))),
             providerSyncStateReader = FakeProviderSyncStateReader(backgroundIndexingActive = true),
-            naturalLanguageSearchInterpreter = passthroughInterpreter
         )
 
         val result = useCase(providerId = 99L, query = "movie", scope = SearchContentScope.MOVIES).first()
@@ -120,13 +124,10 @@ class SearchContentTest {
     @Test
     fun rethrows_non_io_upstream_failures() = runTest {
         val expected = IllegalStateException("channel search failed")
-        val useCase = SearchContent(
+        val useCase = searchContent(
             searchRepository = FakeSearchRepository(
                 channelFlow = flow { throw expected }
             ),
-            providerRepository = FakeProviderRepository(),
-            providerSyncStateReader = FakeProviderSyncStateReader(),
-            naturalLanguageSearchInterpreter = passthroughInterpreter
         )
 
         val thrown = try {
@@ -142,16 +143,13 @@ class SearchContentTest {
 
     @Test
     fun marksSearchPartialWhenRepositoryDoesNotEmitWithinBudget() = runTest {
-        val useCase = SearchContent(
+        val useCase = searchContent(
             searchRepository = FakeSearchRepository(
                 searchContentFlow = flow {
                     delay(3_000L)
                     emit(SearchRepositoryResult(movies = listOf(Movie(id = 2L, name = "Late Movie"))))
                 }
             ),
-            providerRepository = FakeProviderRepository(),
-            providerSyncStateReader = FakeProviderSyncStateReader(),
-            naturalLanguageSearchInterpreter = passthroughInterpreter
         )
 
         val result = useCase(providerId = 99L, query = "movie", scope = SearchContentScope.MOVIES).first()
@@ -162,7 +160,7 @@ class SearchContentTest {
 
     @Test
     fun usesGeminiProbableTitleBeforeOriginalQuery() = runTest {
-        val useCase = SearchContent(
+        val useCase = searchContent(
             searchRepository = FakeSearchRepository(
                 searchContentFlow = flow {
                     emit(
@@ -172,7 +170,7 @@ class SearchContentTest {
                     )
                 }
             ),
-            providerRepository = FakeProviderRepository(),
+            providerRepository = SearchFakeProviderRepository(),
             providerSyncStateReader = FakeProviderSyncStateReader(),
             naturalLanguageSearchInterpreter = FakeNaturalLanguageSearchInterpreter(
                 NaturalLanguageSearchHints(
@@ -194,8 +192,8 @@ class SearchContentTest {
     }
 }
 
-private class FakeProviderRepository : ProviderRepository {
-    override fun getProviders() = flowOf(emptyList())
+private class SearchFakeProviderRepository : ProviderRepository {
+    override fun getProviders(): Flow<List<com.streamvault.domain.model.Provider>> = flowOf(emptyList())
     override fun getActiveProvider() = flowOf(null)
     override fun getActiveBackupProvider() = flowOf(null)
     override suspend fun reconcileActiveProviders() = Unit
@@ -295,6 +293,18 @@ private class FakeNaturalLanguageSearchInterpreter(
     private val hints: NaturalLanguageSearchHints
 ) : NaturalLanguageSearchInterpreter {
     override suspend fun interpret(query: String): NaturalLanguageSearchHints = hints
+}
+
+private class FakePlexSearchEnricher : PlexSearchEnricher {
+    override suspend fun enrich(
+        movies: List<Movie>,
+        series: List<Series>,
+        query: String,
+        includeMovies: Boolean,
+        includeSeries: Boolean,
+        maxResultsPerSection: Int,
+        usedPlexFallback: Boolean,
+    ): Pair<List<Movie>, List<Series>> = movies to series
 }
 
 private class FakeProviderSyncStateReader(

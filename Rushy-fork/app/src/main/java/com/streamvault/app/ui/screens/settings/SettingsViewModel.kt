@@ -18,6 +18,7 @@ import com.streamvault.app.update.AppUpdateDownloadState
 import com.streamvault.app.update.AppUpdateDownloadStatus
 import com.streamvault.app.update.AppUpdateInstaller
 import com.streamvault.app.update.GitHubReleaseChecker
+import com.streamvault.app.update.InstalledAppVersion
 import com.streamvault.app.update.GitHubReleaseInfo
 import com.streamvault.data.local.dao.ProgramDao
 import com.streamvault.data.local.dao.XtreamIndexJobDao
@@ -129,6 +130,9 @@ class SettingsViewModel @Inject constructor(
     private val audioCompatibilityMemoryStore: AudioCompatibilityMemoryStore,
     val plexCredentialStore: PlexCredentialStore,
     val plexClient: PlexClient,
+    val arrCredentialStore: com.streamvault.data.remote.arr.ArrCredentialStore,
+    val radarrClient: com.streamvault.data.remote.arr.RadarrClient,
+    val sonarrClient: com.streamvault.data.remote.arr.SonarrClient,
 ) : ViewModel() {
     private val appContext = application
     private val exportBackup = ExportBackup(backupManager)
@@ -206,7 +210,8 @@ class SettingsViewModel @Inject constructor(
             preferencesRepository = preferencesRepository,
             appUpdateActions = appUpdateActions,
             appUpdateInstaller = appUpdateInstaller,
-            uiState = _uiState
+            uiState = _uiState,
+            isRemoteVersionNewer = ::isRemoteVersionNewerForInstalledBuild,
         )
         registerCombinedProfileObservers(
             scope = viewModelScope,
@@ -296,7 +301,14 @@ class SettingsViewModel @Inject constructor(
                 preferencesRepository = preferencesRepository
             ).collect { snapshot ->
                 val previousProviderIds = _uiState.value.providers.map { it.id }.toSet()
-                _uiState.update { it.applyPreferenceSnapshot(snapshot) }
+                val installed = InstalledAppVersion.read(appContext)
+                _uiState.update {
+                    it.applyPreferenceSnapshot(
+                        snapshot = snapshot,
+                        installedVersionCode = installed.versionCode,
+                        installedVersionName = installed.versionName,
+                    )
+                }
                 val currentProviderIds = snapshot.providers.map { it.id }.toSet()
                 val removedIds = previousProviderIds - currentProviderIds
                 if (removedIds.isNotEmpty()) {
@@ -691,7 +703,17 @@ class SettingsViewModel @Inject constructor(
         appUpdateActions.checkForAppUpdates(
             scope = viewModelScope,
             manual = true,
-            isRemoteVersionNewer = ::isRemoteVersionNewer
+            isRemoteVersionNewer = ::isRemoteVersionNewerForInstalledBuild
+        )
+    }
+
+    private fun isRemoteVersionNewerForInstalledBuild(remoteVersionCode: Int?, remoteVersionName: String): Boolean {
+        val installed = InstalledAppVersion.read(appContext)
+        return isRemoteVersionNewer(
+            remoteVersionCode = remoteVersionCode,
+            remoteVersionName = remoteVersionName,
+            installedVersionCode = installed.versionCode,
+            installedVersionName = installed.versionName,
         )
     }
 

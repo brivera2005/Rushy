@@ -15,6 +15,7 @@ data class AppUpdateUiModel(
     val downloadUrl: String? = null,
     val releaseNotes: String = "",
     val publishedAt: String? = null,
+    val apkSha256: String? = null,
     val isUpdateAvailable: Boolean = false,
     val lastCheckedAt: Long? = null,
     val errorMessage: String? = null,
@@ -31,7 +32,8 @@ internal fun AppUpdateUiModel.toReleaseInfoOrNull(): GitHubReleaseInfo? {
         releaseUrl = releaseUrl,
         downloadUrl = downloadUrl,
         releaseNotes = releaseNotes,
-        publishedAt = publishedAt
+        publishedAt = publishedAt,
+        apkSha256 = apkSha256,
     )
 }
 
@@ -49,7 +51,10 @@ internal fun AppUpdateUiModel.toDownloadState(): AppUpdateDownloadState {
     )
 }
 
-internal fun SettingsPreferenceSnapshot.toCachedAppUpdateUiModel(): AppUpdateUiModel {
+internal fun SettingsPreferenceSnapshot.toCachedAppUpdateUiModel(
+    installedVersionCode: Int,
+    installedVersionName: String,
+): AppUpdateUiModel {
     val versionName = cachedAppUpdateVersionName
     return AppUpdateUiModel(
         latestVersionName = versionName,
@@ -58,8 +63,15 @@ internal fun SettingsPreferenceSnapshot.toCachedAppUpdateUiModel(): AppUpdateUiM
         downloadUrl = cachedAppUpdateDownloadUrl,
         releaseNotes = cachedAppUpdateReleaseNotes,
         publishedAt = cachedAppUpdatePublishedAt,
+        apkSha256 = cachedAppUpdateApkSha256,
         isUpdateAvailable = versionName?.let {
-            isRemoteVersionNewer(cachedAppUpdateVersionCode, it, cachedAppUpdatePublishedAt)
+            isRemoteVersionNewer(
+                remoteVersionCode = cachedAppUpdateVersionCode,
+                remoteVersionName = it,
+                remotePublishedAt = cachedAppUpdatePublishedAt,
+                installedVersionCode = installedVersionCode,
+                installedVersionName = installedVersionName,
+            )
         } ?: false,
         lastCheckedAt = lastAppUpdateCheckAt
     )
@@ -68,14 +80,16 @@ internal fun SettingsPreferenceSnapshot.toCachedAppUpdateUiModel(): AppUpdateUiM
 internal fun isRemoteVersionNewer(
     remoteVersionCode: Int?,
     remoteVersionName: String,
-    remotePublishedAt: String? = null
+    remotePublishedAt: String? = null,
+    installedVersionCode: Int = BuildConfig.VERSION_CODE,
+    installedVersionName: String = BuildConfig.VERSION_NAME,
 ): Boolean {
     return isRemoteVersionNewerForBuild(
         remoteVersionCode = remoteVersionCode,
         remoteVersionName = remoteVersionName,
         remotePublishedAt = remotePublishedAt,
-        currentVersionCode = BuildConfig.VERSION_CODE,
-        currentVersionName = BuildConfig.VERSION_NAME,
+        currentVersionCode = installedVersionCode,
+        currentVersionName = installedVersionName,
         currentBuildTimestampUtc = BuildConfig.BUILD_TIMESTAMP_UTC,
         currentChannel = AppUpdateChannel.fromCurrentBuild()
     )

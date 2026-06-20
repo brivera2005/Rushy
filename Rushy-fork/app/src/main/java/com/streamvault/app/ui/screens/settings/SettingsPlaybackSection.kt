@@ -102,8 +102,8 @@ internal fun LazyListScope.settingsPlaybackSection(
         }
         val liveTvPlayerOptions = remember {
             listOf(
-                LiveTvPlayerMode.TIVIMATE_ALWAYS,
                 LiveTvPlayerMode.INTERNAL,
+                LiveTvPlayerMode.TIVIMATE_ALWAYS,
                 LiveTvPlayerMode.TIVIMATE,
                 LiveTvPlayerMode.TIVIMATE_ON_STALL,
                 LiveTvPlayerMode.EXTERNAL
@@ -322,6 +322,12 @@ internal fun LazyListScope.settingsPlaybackSection(
             text = stringResource(R.string.settings_live_tv_player_subtitle),
             style = MaterialTheme.typography.bodySmall,
             color = OnBackground.copy(alpha = 0.6f),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+        Text(
+            text = stringResource(R.string.settings_live_tv_player_lockout_warning),
+            style = MaterialTheme.typography.bodySmall,
+            color = OnBackground.copy(alpha = 0.75f),
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
         HorizontalDivider(color = Color.White.copy(alpha = 0.07f), modifier = Modifier.padding(vertical = 4.dp))

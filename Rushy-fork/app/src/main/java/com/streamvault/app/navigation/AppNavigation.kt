@@ -276,8 +276,15 @@ private fun shouldRouteLiveTvToExternalPlayer(
 ): Boolean {
     if (!request.contentType.equals("LIVE", ignoreCase = true)) return false
     if (request.archiveStartMs != null || request.archiveEndMs != null) return false
-    return liveTvPlayerMode == LiveTvPlayerMode.TIVIMATE_ALWAYS ||
-        liveTvPlayerMode == LiveTvPlayerMode.TIVIMATE
+    // Built-in ExoPlayer is the default path. External routing only when explicitly enabled
+    // in Settings (never for TIVIMATE_ON_STALL — stall recovery stays in-app).
+    return when (liveTvPlayerMode) {
+        LiveTvPlayerMode.TIVIMATE_ALWAYS,
+        LiveTvPlayerMode.TIVIMATE,
+        LiveTvPlayerMode.EXTERNAL -> true
+        LiveTvPlayerMode.INTERNAL,
+        LiveTvPlayerMode.TIVIMATE_ON_STALL -> false
+    }
 }
 
 private fun launchExternalLivePlayer(

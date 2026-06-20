@@ -454,7 +454,10 @@ class Media3PlayerEngine @Inject constructor(
 
     override fun stop() {
         retryJob?.cancel()
-        exoPlayer?.stop()
+        exoPlayer?.let { player ->
+            player.stop()
+            player.clearMediaItems()
+        }
         _playbackState.value = PlaybackState.IDLE
         _isPlaying.value = false
         _mediaTitle.value = null

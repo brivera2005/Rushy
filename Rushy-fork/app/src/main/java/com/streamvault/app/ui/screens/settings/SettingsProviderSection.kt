@@ -170,6 +170,12 @@ internal fun LazyListScope.providerSection(
         onSyncBackup = viewModel::syncPlexBackupLibrary,
     )
 
+    arrSettingsSection(
+        arrCredentials = viewModel.arrCredentialStore,
+        radarrClient = viewModel.radarrClient,
+        sonarrClient = viewModel.sonarrClient,
+    )
+
     item {
         TvClickableSurface(
             onClick = onAddProvider,

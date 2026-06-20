@@ -13,6 +13,7 @@ import com.streamvault.domain.manager.RecordingManager
 import com.streamvault.domain.repository.CategoryRepository
 import com.streamvault.domain.repository.FavoriteRepository
 import com.streamvault.domain.repository.ProviderRepository
+import com.streamvault.domain.repository.WatchlistRequestRepository
 import com.streamvault.domain.usecase.SearchContent
 import com.streamvault.domain.usecase.SearchContentResult
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,7 @@ class SearchViewModelTest {
 
     private val providerRepository: ProviderRepository = mock()
     private val searchContent: SearchContent = mock()
+    private val watchlistRequestRepository: WatchlistRequestRepository = mock()
     private val preferencesRepository: PreferencesRepository = mock()
     private val parentalControlManager: ParentalControlManager = mock()
     private val favoriteRepository: FavoriteRepository = mock()
@@ -63,6 +65,7 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             providerRepository,
             searchContent,
+            watchlistRequestRepository,
             preferencesRepository,
             parentalControlManager,
             favoriteRepository,
@@ -117,6 +120,7 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             providerRepository,
             searchContent,
+            watchlistRequestRepository,
             preferencesRepository,
             parentalControlManager,
             favoriteRepository,
@@ -158,6 +162,7 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             providerRepository,
             searchContent,
+            watchlistRequestRepository,
             preferencesRepository,
             parentalControlManager,
             favoriteRepository,
@@ -207,6 +212,7 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             providerRepository,
             searchContent,
+            watchlistRequestRepository,
             preferencesRepository,
             parentalControlManager,
             favoriteRepository,

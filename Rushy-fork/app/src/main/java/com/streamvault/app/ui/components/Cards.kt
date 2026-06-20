@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -78,12 +79,17 @@ import com.streamvault.app.ui.theme.TextTertiary
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.Movie
 import com.streamvault.domain.model.Series
+import com.streamvault.domain.model.PlexAvailability
+import com.streamvault.domain.model.resolvePlexAvailability
 import com.streamvault.domain.model.showsPlexBadge
 import com.streamvault.app.ui.design.FocusSpec
+import com.streamvault.app.ui.interaction.TvClickableSurface
 import com.streamvault.app.ui.interaction.mouseClickable
 import com.streamvault.app.ui.interaction.rememberTvInteractionSounds
+import androidx.tv.material3.ExperimentalTvMaterial3Api
 
 private val PlexBadgeColor = Color(0xFFE5A00D)
+private val PlexPlayableColor = Color(0xFF43A047)
 
 @Composable
 private fun BoxScope.PlexCatalogBadge(modifier: Modifier = Modifier) {
@@ -98,6 +104,73 @@ private fun BoxScope.PlexCatalogBadge(modifier: Modifier = Modifier) {
             text = "P",
             style = MaterialTheme.typography.labelSmall,
             color = PlexBadgeColor
+        )
+    }
+}
+
+@Composable
+private fun BoxScope.PlexPlayableBadge(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .align(Alignment.BottomEnd)
+            .padding(6.dp)
+            .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+            .padding(4.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.PlayArrow,
+            contentDescription = stringResource(R.string.search_plex_playable),
+            tint = PlexPlayableColor,
+            modifier = Modifier.size(14.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun BoxScope.PlexWatchlistActionButton(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    TvClickableSurface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp)
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(6.dp)),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Black.copy(alpha = 0.72f),
+            focusedContainerColor = Primary.copy(alpha = 0.92f),
+            contentColor = TextPrimary,
+            focusedContentColor = Color.White,
+            disabledContainerColor = Color.Black.copy(alpha = 0.45f),
+            disabledContentColor = TextTertiary,
+        ),
+        border = ClickableSurfaceDefaults.border(
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, FocusBorder),
+                shape = RoundedCornerShape(6.dp),
+            ),
+        ),
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = if (enabled) {
+                if (isFocused) Color.White else AccentCyan
+            } else {
+                TextTertiary
+            },
         )
     }
 }
@@ -372,7 +445,10 @@ fun MovieCard(
     isReorderMode: Boolean = false,
     isDragging: Boolean = false,
     width: Dp = 136.dp,
-    height: Dp = 204.dp
+    height: Dp = 204.dp,
+    onAddToWatchlist: (() -> Unit)? = null,
+    watchlistPending: Boolean = false,
+    watchlistRequested: Boolean = false,
 ) {
     val movieDescription = buildString {
         append(movie.name)
@@ -464,8 +540,22 @@ fun MovieCard(
                 }
             }
 
-            if (movie.showsPlexBadge()) {
-                PlexCatalogBadge()
+            when (movie.resolvePlexAvailability()) {
+                PlexAvailability.PLAYABLE -> PlexPlayableBadge()
+                PlexAvailability.REQUESTABLE -> {
+                    PlexWatchlistActionButton(
+                        label = when {
+                            watchlistRequested -> stringResource(R.string.search_watchlist_requested)
+                            watchlistPending -> stringResource(R.string.search_watchlist_pending)
+                            else -> stringResource(R.string.search_add_to_watchlist)
+                        },
+                        enabled = onAddToWatchlist != null && !watchlistPending && !watchlistRequested,
+                        onClick = { onAddToWatchlist?.invoke() },
+                    )
+                }
+                PlexAvailability.UNKNOWN -> if (movie.showsPlexBadge()) {
+                    PlexCatalogBadge()
+                }
             }
         }
     }
@@ -483,7 +573,10 @@ fun SeriesCard(
     isReorderMode: Boolean = false,
     isDragging: Boolean = false,
     width: Dp = 136.dp,
-    height: Dp = 204.dp
+    height: Dp = 204.dp,
+    onAddToWatchlist: (() -> Unit)? = null,
+    watchlistPending: Boolean = false,
+    watchlistRequested: Boolean = false,
 ) {
     val seriesDescription = buildString {
         append(series.name)
@@ -578,8 +671,22 @@ fun SeriesCard(
                 }
             }
 
-            if (series.showsPlexBadge()) {
-                PlexCatalogBadge()
+            when (series.resolvePlexAvailability()) {
+                PlexAvailability.PLAYABLE -> PlexPlayableBadge()
+                PlexAvailability.REQUESTABLE -> {
+                    PlexWatchlistActionButton(
+                        label = when {
+                            watchlistRequested -> stringResource(R.string.search_watchlist_requested)
+                            watchlistPending -> stringResource(R.string.search_watchlist_pending)
+                            else -> stringResource(R.string.search_add_to_watchlist)
+                        },
+                        enabled = onAddToWatchlist != null && !watchlistPending && !watchlistRequested,
+                        onClick = { onAddToWatchlist?.invoke() },
+                    )
+                }
+                PlexAvailability.UNKNOWN -> if (series.showsPlexBadge()) {
+                    PlexCatalogBadge()
+                }
             }
         }
     }

@@ -226,6 +226,7 @@ fun PlayerTransparentGuideOverlay(
                             programsByChannel = uiState.programsByChannel,
                             guideWindowStart = uiState.guideWindowStart,
                             guideWindowEnd = uiState.guideWindowEnd,
+                            guideAnchorTime = uiState.guideAnchorTime,
                             density = uiState.selectedDensity,
                             transparentOverlay = true,
                             initialFocusedChannelId = currentPlayerChannelId.takeIf { it > 0L },

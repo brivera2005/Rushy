@@ -1,6 +1,7 @@
 package com.streamvault.app.bootstrap
 
 import com.streamvault.app.DefaultCredentials
+import com.streamvault.data.remote.arr.ArrCredentialStore
 import com.streamvault.data.remote.plex.PlexClient
 import com.streamvault.data.remote.plex.PlexCredentialStore
 import com.streamvault.data.util.ProviderInputSanitizer
@@ -19,6 +20,7 @@ class RushyCredentialsBootstrap @Inject constructor(
     private val providerRepository: ProviderRepository,
     private val validateAndAddProvider: ValidateAndAddProvider,
     private val plexCredentialStore: PlexCredentialStore,
+    private val arrCredentialStore: ArrCredentialStore,
 ) {
     private companion object {
         val LIVE_PROVIDER_TYPES = setOf(
@@ -34,7 +36,23 @@ class RushyCredentialsBootstrap @Inject constructor(
         removeStaleXtreamProviders(providerRepository.getProviders().first())
         ensureXtreamProvider(providerRepository.getProviders().first())
         ensurePlexProvider(providerRepository.getProviders().first())
+        ensureArrCredentials()
         ensureDualProviderMode()
+    }
+
+    private fun ensureArrCredentials() {
+        if (DefaultCredentials.RADARR_URL.isNotBlank() && DefaultCredentials.RADARR_API_KEY.isNotBlank()) {
+            arrCredentialStore.saveRadarr(
+                DefaultCredentials.RADARR_URL,
+                DefaultCredentials.RADARR_API_KEY,
+            )
+        }
+        if (DefaultCredentials.SONARR_URL.isNotBlank() && DefaultCredentials.SONARR_API_KEY.isNotBlank()) {
+            arrCredentialStore.saveSonarr(
+                DefaultCredentials.SONARR_URL,
+                DefaultCredentials.SONARR_API_KEY,
+            )
+        }
     }
 
     private suspend fun removeStaleXtreamProviders(providers: List<Provider>) {

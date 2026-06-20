@@ -3,14 +3,18 @@ package com.streamvault.app.update
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.util.Log
 import androidx.core.content.FileProvider
+import com.streamvault.app.ui.screens.settings.isRemoteVersionNewerForBuild
 import com.streamvault.app.BuildConfig
 import com.streamvault.data.preferences.PreferencesRepository
 import com.streamvault.domain.model.Result
@@ -72,7 +76,65 @@ class AppUpdateInstaller @Inject constructor(
         registerDownloadReceiver()
         scope.launch {
             refreshState()
+            reconcileInstalledUpdateState()
         }
+    }
+
+    /**
+     * Clears cached/downloaded OTA state when PackageManager reports the target release is already
+     * installed. Uses live package metadata instead of [BuildConfig], which stays stale until the
+     * process restarts.
+     */
+    suspend fun reconcileInstalledUpdateState(): Boolean = withContext(Dispatchers.IO) {
+        val installed = InstalledAppVersion.read(context)
+        val cachedVersionName = preferencesRepository.cachedAppUpdateVersionName.first()
+        if (cachedVersionName.isNullOrBlank()) {
+            clearDownloadedArtifactsIfInstalled(installed)
+            return@withContext false
+        }
+
+        val cachedVersionCode = preferencesRepository.cachedAppUpdateVersionCode.first()
+        val stillNeeded = isRemoteVersionNewerForBuild(
+            remoteVersionCode = cachedVersionCode,
+            remoteVersionName = cachedVersionName,
+            remotePublishedAt = preferencesRepository.cachedAppUpdatePublishedAt.first(),
+            currentVersionCode = installed.versionCode,
+            currentVersionName = installed.versionName,
+            currentBuildTimestampUtc = BuildConfig.BUILD_TIMESTAMP_UTC,
+            currentChannel = AppUpdateChannel.fromCurrentBuild(),
+        )
+
+        if (stillNeeded) {
+            return@withContext false
+        }
+
+        Log.i(TAG, "Installed ${installed.versionName} (${installed.versionCode}); clearing stale OTA cache for $cachedVersionName")
+        preferencesRepository.setCachedAppUpdateRelease(
+            versionName = null,
+            versionCode = null,
+            releaseUrl = null,
+            downloadUrl = null,
+            releaseNotes = null,
+            publishedAt = null,
+            apkSha256 = null,
+        )
+        clearDownloadedArtifactsIfInstalled(installed)
+        _downloadState.value = AppUpdateDownloadState()
+        true
+    }
+
+    private suspend fun clearDownloadedArtifactsIfInstalled(installed: InstalledAppVersion) {
+        val downloadedVersionName = preferencesRepository.downloadedAppUpdateVersionName.first()
+        if (!downloadedVersionName.isNullOrBlank()) {
+            val downloadedApk = apkFileForVersion(downloadedVersionName)
+            val archiveVersionCode = readArchiveVersionCode(downloadedApk)
+            if (archiveVersionCode != null && archiveVersionCode <= installed.versionCode) {
+                downloadedApk.delete()
+            }
+        }
+        preferencesRepository.setAppUpdateDownloadId(null)
+        preferencesRepository.setAppUpdateDownloadVersionName(null)
+        preferencesRepository.setDownloadedAppUpdateVersionName(null)
     }
 
     suspend fun refreshState(): AppUpdateDownloadState = withContext(Dispatchers.IO) {
@@ -246,14 +308,20 @@ class AppUpdateInstaller @Inject constructor(
             return@withContext Result.error("Downloaded update file is missing")
         }
 
+        when (val validation = validateDownloadedApk(apkFile)) {
+            is Result.Error -> return@withContext validation
+            is Result.Success -> Unit
+            Result.Loading -> return@withContext Result.error("Update validation is still in progress")
+        }
+
         // SEC-L02: Verify SHA-256 integrity before handing the APK to the package manager.
         // This guards against a truncated download, a network MITM, or a tampered file in
         // the external storage directory (which is world-readable on unencrypted devices).
         if (!expectedSha256.isNullOrBlank()) {
             val actualHash = computeSha256Hex(apkFile)
             if (!actualHash.equals(expectedSha256.trim(), ignoreCase = true)) {
-                android.util.Log.e(
-                    "AppUpdateInstaller",
+                Log.e(
+                    TAG,
                     "APK SHA-256 mismatch for ${apkFile.name}: expected=${expectedSha256.trim()} actual=$actualHash"
                 )
                 apkFile.delete()
@@ -264,12 +332,12 @@ class AppUpdateInstaller @Inject constructor(
                     "Downloaded update failed integrity check. The file has been removed; please download again."
                 )
             }
-            android.util.Log.i("AppUpdateInstaller", "APK SHA-256 verified OK for ${apkFile.name}")
+            Log.i(TAG, "APK SHA-256 verified OK for ${apkFile.name}")
         }
 
         val apkUri = FileProvider.getUriForFile(
             context,
-            "${BuildConfig.APPLICATION_ID}.fileprovider",
+            "${context.packageName}.fileprovider",
             apkFile
         )
 
@@ -277,6 +345,7 @@ class AppUpdateInstaller @Inject constructor(
             setDataAndType(apkUri, "application/vnd.android.package-archive")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = ClipData.newUri(context.contentResolver, "Rushy update", apkUri)
         }
 
         try {
@@ -310,11 +379,79 @@ class AppUpdateInstaller @Inject constructor(
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    private suspend fun validateDownloadedApk(apkFile: File): Result<Unit> {
+        val archiveInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.getPackageArchiveInfo(
+                apkFile.absolutePath,
+                PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES.toLong()),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageArchiveInfo(
+                apkFile.absolutePath,
+                PackageManager.GET_SIGNING_CERTIFICATES,
+            )
+        } ?: return Result.error("Downloaded update is not a valid Android package")
+
+        archiveInfo.applicationInfo?.let { applicationInfo ->
+            applicationInfo.sourceDir = apkFile.absolutePath
+            applicationInfo.publicSourceDir = apkFile.absolutePath
+        }
+
+        if (archiveInfo.packageName != context.packageName) {
+            apkFile.delete()
+            preferencesRepository.setDownloadedAppUpdateVersionName(null)
+            return Result.error(
+                "Downloaded update targets ${archiveInfo.packageName}, but this install is ${context.packageName}. " +
+                    "Only rushy.apk from GitHub Releases can update Rushy."
+            )
+        }
+
+        val archiveVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            archiveInfo.longVersionCode.toInt()
+        } else {
+            @Suppress("DEPRECATION")
+            archiveInfo.versionCode
+        }
+        val installed = InstalledAppVersion.read(context)
+        if (archiveVersionCode <= installed.versionCode) {
+            reconcileInstalledUpdateState()
+            return Result.error(
+                "This update is already installed (${installed.versionName}). Restart Rushy if the app still looks outdated."
+            )
+        }
+
+        return Result.success(Unit)
+    }
+
+    private fun readArchiveVersionCode(apkFile: File): Int? {
+        if (!apkFile.exists()) return null
+        val archiveInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.getPackageArchiveInfo(
+                apkFile.absolutePath,
+                PackageManager.PackageInfoFlags.of(0),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+        } ?: return null
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            archiveInfo.longVersionCode.toInt()
+        } else {
+            @Suppress("DEPRECATION")
+            archiveInfo.versionCode
+        }
+    }
+
     private fun apkFileForVersion(versionName: String): File {
         val sanitizedVersion = versionName.replace(Regex("[^A-Za-z0-9._-]"), "_")
         val downloadsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
             ?: File(context.cacheDir, "downloads")
         return File(downloadsDir, "rushy-$sanitizedVersion.apk")
+    }
+
+    private companion object {
+        private const val TAG = "AppUpdateInstaller"
     }
 
     private fun registerDownloadReceiver() {

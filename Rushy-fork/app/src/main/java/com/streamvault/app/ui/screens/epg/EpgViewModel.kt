@@ -1485,9 +1485,6 @@ class EpgViewModel @Inject constructor(
             startupCategoryId.value = preferencesRepository.guideDefaultCategoryId.first() ?: VirtualCategoryIds.FAVORITES
             showFavoritesOnly.value = preferencesRepository.guideFavoritesOnly.first()
             showScheduledOnly.value = preferencesRepository.guideScheduledOnly.first()
-            preferencesRepository.guideAnchorTime.first()
-                ?.takeIf { it > 0L }
-                ?.let { guideAnchorTime.value = it }
         }
     }
 

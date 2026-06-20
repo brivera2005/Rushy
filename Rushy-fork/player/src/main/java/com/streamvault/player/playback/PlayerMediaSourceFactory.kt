@@ -64,7 +64,7 @@ class PlayerMediaSourceFactory(
             vodHttpProtocolMode = vodHttpProtocolMode,
             preload = preload
         )
-        val mediaItem = buildMediaItem(streamInfo)
+        val mediaItem = buildMediaItem(streamInfo, resolvedStreamType)
         val mediaSource = when {
             streamInfo.streamType == StreamType.RTSP || resolvedStreamType == ResolvedStreamType.RTSP ->
                 RtspMediaSource.Factory().createMediaSource(mediaItem)
@@ -118,7 +118,7 @@ class PlayerMediaSourceFactory(
         return timeoutProfile to mediaSource
     }
 
-    private fun buildMediaItem(streamInfo: StreamInfo): MediaItem {
+    private fun buildMediaItem(streamInfo: StreamInfo, resolvedStreamType: ResolvedStreamType): MediaItem {
         return MediaItem.Builder()
             .setUri(Uri.parse(streamInfo.url))
             .setMediaId(mediaIdFor(streamInfo))
@@ -128,6 +128,17 @@ class PlayerMediaSourceFactory(
                     .build()
             )
             .apply {
+                if (resolvedStreamType == ResolvedStreamType.HLS) {
+                    setLiveConfiguration(
+                        MediaItem.LiveConfiguration.Builder()
+                            .setTargetOffsetMs(2_000)
+                            .setMinOffsetMs(1_000)
+                            .setMaxOffsetMs(5_000)
+                            .setMinPlaybackSpeed(1.0f)
+                            .setMaxPlaybackSpeed(1.0f)
+                            .build()
+                    )
+                }
                 streamInfo.drmInfo?.let { drmInfo ->
                     setDrmConfiguration(
                         MediaItem.DrmConfiguration.Builder(drmInfo.scheme.toUuid())

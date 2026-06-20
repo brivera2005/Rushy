@@ -10,6 +10,7 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import com.streamvault.app.diagnostics.CrashReportStore
 import com.streamvault.app.diagnostics.RuntimeDiagnosticsManager
+import com.streamvault.app.update.AppUpdateInstaller
 import com.streamvault.app.update.GitHubReleaseChecker
 import com.streamvault.app.ui.accessibility.isReducedMotionEnabled
 import com.streamvault.app.bootstrap.RushyCredentialsBootstrap
@@ -50,6 +51,9 @@ class StreamVaultApp : Application(), SingletonImageLoader.Factory {
     lateinit var gitHubReleaseChecker: GitHubReleaseChecker
 
     @Inject
+    lateinit var appUpdateInstaller: AppUpdateInstaller
+
+    @Inject
     lateinit var okHttpClient: OkHttpClient
 
     @Inject
@@ -73,7 +77,7 @@ class StreamVaultApp : Application(), SingletonImageLoader.Factory {
         runtimeDiagnosticsManager.start()
         ExternalPlayerRouter.refreshAvailability(this)
         applicationScope.launch {
-            preferencesRepository.migrateLiveTvPlayerModeToTiviMateAlways()
+            preferencesRepository.migrateLiveTvPlayerModeToBuiltIn()
             providerRepository.reconcileActiveProviders()
             rushyCredentialsBootstrap.ensureDefaultCredentialsIfNeeded()
         }
@@ -84,6 +88,7 @@ class StreamVaultApp : Application(), SingletonImageLoader.Factory {
         }
         applicationScope.launch {
             refreshCachedAppUpdateIfNeeded()
+            appUpdateInstaller.reconcileInstalledUpdateState()
         }
         
         // Schedule daily data maintenance: EPG pruning, stale-favorite cleanup, and DB compaction checks.
@@ -139,7 +144,8 @@ class StreamVaultApp : Application(), SingletonImageLoader.Factory {
                     releaseUrl = result.data.releaseUrl,
                     downloadUrl = result.data.downloadUrl,
                     releaseNotes = result.data.releaseNotes,
-                    publishedAt = result.data.publishedAt
+                    publishedAt = result.data.publishedAt,
+                    apkSha256 = result.data.apkSha256,
                 )
             }
             else -> Unit

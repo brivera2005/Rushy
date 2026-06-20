@@ -28,7 +28,8 @@ internal fun registerSettingsAppUpdateObservers(
     preferencesRepository: PreferencesRepository,
     appUpdateActions: SettingsAppUpdateActions,
     appUpdateInstaller: AppUpdateInstaller,
-    uiState: MutableStateFlow<SettingsUiState>
+    uiState: MutableStateFlow<SettingsUiState>,
+    isRemoteVersionNewer: (Int?, String) -> Boolean,
 ) {
     scope.launch {
         combine(
@@ -42,7 +43,7 @@ internal fun registerSettingsAppUpdateObservers(
                 appUpdateActions.checkForAppUpdates(
                     scope = scope,
                     manual = false,
-                    isRemoteVersionNewer = ::isRemoteVersionNewer,
+                    isRemoteVersionNewer = isRemoteVersionNewer,
                     autoDownload = autoDownload
                 )
             }

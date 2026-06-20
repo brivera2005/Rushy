@@ -80,4 +80,31 @@ class SettingsAppUpdateModelsTest {
 
         assertThat(result).isFalse()
     }
+
+    @Test
+    fun installedVersionNewerThanCachedReleaseIsNotUpdateAvailable() {
+        val result = isRemoteVersionNewerForBuild(
+            remoteVersionCode = 29,
+            remoteVersionName = "2.4.3",
+            remotePublishedAt = null,
+            currentVersionCode = 29,
+            currentVersionName = "2.4.3",
+            currentBuildTimestampUtc = 0L,
+            currentChannel = AppUpdateChannel.Stable
+        )
+
+        assertThat(result).isFalse()
+    }
+
+    @Test
+    fun staleBuildConfigDoesNotHideAvailableUpdateWhenInstalledVersionIsOlder() {
+        val result = isRemoteVersionNewer(
+            remoteVersionCode = 30,
+            remoteVersionName = "2.4.4",
+            installedVersionCode = 28,
+            installedVersionName = "2.4.2",
+        )
+
+        assertThat(result).isTrue()
+    }
 }

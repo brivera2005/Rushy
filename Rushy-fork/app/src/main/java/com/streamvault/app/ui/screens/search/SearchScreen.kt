@@ -59,8 +59,11 @@ import com.streamvault.domain.manager.ParentalControlManager
 import com.streamvault.domain.model.Channel
 import com.streamvault.domain.model.ContentType
 import com.streamvault.domain.model.Movie
+import com.streamvault.domain.model.PlexAvailability
 import com.streamvault.domain.model.SearchHistoryScope
 import com.streamvault.domain.model.Series
+import com.streamvault.domain.model.resolvePlexAvailability
+import com.streamvault.domain.repository.WatchlistRequestRepository
 import com.streamvault.domain.repository.CategoryRepository
 import com.streamvault.domain.repository.FavoriteRepository
 import com.streamvault.domain.repository.ProviderRepository
@@ -75,6 +78,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import android.widget.Toast
 import javax.inject.Inject
 
 @HiltViewModel
@@ -82,6 +86,7 @@ import javax.inject.Inject
 class SearchViewModel @Inject constructor(
     private val providerRepository: ProviderRepository,
     private val searchContent: SearchContent,
+    private val watchlistRequestRepository: WatchlistRequestRepository,
     private val preferencesRepository: com.streamvault.data.preferences.PreferencesRepository,
     private val parentalControlManager: ParentalControlManager,
     private val favoriteRepository: FavoriteRepository,
@@ -107,6 +112,15 @@ class SearchViewModel @Inject constructor(
 
     private val _scheduledChannelIds = MutableStateFlow<Set<Long>>(emptySet())
     val scheduledChannelIds: StateFlow<Set<Long>> = _scheduledChannelIds.asStateFlow()
+
+    private val _watchlistPendingIds = MutableStateFlow<Set<Long>>(emptySet())
+    val watchlistPendingIds: StateFlow<Set<Long>> = _watchlistPendingIds.asStateFlow()
+
+    private val _watchlistRequestedIds = MutableStateFlow<Set<Long>>(emptySet())
+    val watchlistRequestedIds: StateFlow<Set<Long>> = _watchlistRequestedIds.asStateFlow()
+
+    private val _watchlistMessage = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val watchlistMessage: SharedFlow<String> = _watchlistMessage.asSharedFlow()
 
     private val unlockedCategoryIds = providerRepository.getActiveProvider()
         .onEach { provider -> _activeProviderId.value = provider?.id }
@@ -302,6 +316,32 @@ class SearchViewModel @Inject constructor(
             )
         }
     }
+
+    fun requestMovieWatchlist(movie: Movie) {
+        if (movie.resolvePlexAvailability() != PlexAvailability.REQUESTABLE) return
+        viewModelScope.launch {
+            _watchlistPendingIds.update { it + movie.id }
+            val result = watchlistRequestRepository.requestMovie(movie)
+            _watchlistPendingIds.update { it - movie.id }
+            if (result.success) {
+                _watchlistRequestedIds.update { it + movie.id }
+            }
+            _watchlistMessage.emit(result.message)
+        }
+    }
+
+    fun requestSeriesWatchlist(series: Series) {
+        if (series.resolvePlexAvailability() != PlexAvailability.REQUESTABLE) return
+        viewModelScope.launch {
+            _watchlistPendingIds.update { it + series.id }
+            val result = watchlistRequestRepository.requestSeries(series)
+            _watchlistPendingIds.update { it - series.id }
+            if (result.success) {
+                _watchlistRequestedIds.update { it + series.id }
+            }
+            _watchlistMessage.emit(result.message)
+        }
+    }
 }
 
 private data class SearchFilterParams(
@@ -366,6 +406,8 @@ fun SearchScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val recordingChannelIds by viewModel.recordingChannelIds.collectAsStateWithLifecycle()
     val scheduledChannelIds by viewModel.scheduledChannelIds.collectAsStateWithLifecycle()
+    val watchlistPendingIds by viewModel.watchlistPendingIds.collectAsStateWithLifecycle()
+    val watchlistRequestedIds by viewModel.watchlistRequestedIds.collectAsStateWithLifecycle()
     val focusManager = LocalFocusManager.current
     val searchFocusRequester = remember { FocusRequester() }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -420,6 +462,12 @@ fun SearchScreen(
 
     LaunchedEffect(Unit) {
         searchFocusRequester.requestFocusSafely(tag = "SearchScreen", target = "Search field")
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.watchlistMessage.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
     }
 
     LaunchedEffect(initialQuery) {
@@ -663,11 +711,20 @@ fun SearchScreen(
                                             if (movieLocked) {
                                                 pendingMovie = movie
                                                 showPinDialog = true
+                                            } else if (movie.resolvePlexAvailability() == PlexAvailability.REQUESTABLE) {
+                                                viewModel.requestMovieWatchlist(movie)
                                             } else {
                                                 onMovieClick(movie)
                                             }
                                         },
-                                        onLongClick = { showMovieActions(movie) }
+                                        onLongClick = { showMovieActions(movie) },
+                                        onAddToWatchlist = if (movie.resolvePlexAvailability() == PlexAvailability.REQUESTABLE) {
+                                            { viewModel.requestMovieWatchlist(movie) }
+                                        } else {
+                                            null
+                                        },
+                                        watchlistPending = movie.id in watchlistPendingIds,
+                                        watchlistRequested = movie.id in watchlistRequestedIds,
                                     )
                                 }
                             }
@@ -692,11 +749,20 @@ fun SearchScreen(
                                             if (seriesLocked) {
                                                 pendingSeries = seriesItem
                                                 showPinDialog = true
+                                            } else if (seriesItem.resolvePlexAvailability() == PlexAvailability.REQUESTABLE) {
+                                                viewModel.requestSeriesWatchlist(seriesItem)
                                             } else {
                                                 onSeriesClick(seriesItem)
                                             }
                                         },
-                                        onLongClick = { showSeriesActions(seriesItem) }
+                                        onLongClick = { showSeriesActions(seriesItem) },
+                                        onAddToWatchlist = if (seriesItem.resolvePlexAvailability() == PlexAvailability.REQUESTABLE) {
+                                            { viewModel.requestSeriesWatchlist(seriesItem) }
+                                        } else {
+                                            null
+                                        },
+                                        watchlistPending = seriesItem.id in watchlistPendingIds,
+                                        watchlistRequested = seriesItem.id in watchlistRequestedIds,
                                     )
                                 }
                             }
@@ -746,6 +812,8 @@ fun SearchScreen(
                             }) { row ->
                                 SearchMovieGridRow(
                                     movies = row,
+                                    watchlistPendingIds = watchlistPendingIds,
+                                    watchlistRequestedIds = watchlistRequestedIds,
                                     isLocked = { movie ->
                                         isLocked(
                                             categoryId = movie.categoryId,
@@ -757,11 +825,14 @@ fun SearchScreen(
                                         if (locked) {
                                             pendingMovie = movie
                                             showPinDialog = true
+                                        } else if (movie.resolvePlexAvailability() == PlexAvailability.REQUESTABLE) {
+                                            viewModel.requestMovieWatchlist(movie)
                                         } else {
                                             onMovieClick(movie)
                                         }
                                     },
-                                    onMovieLongClick = { movie -> showMovieActions(movie) }
+                                    onMovieLongClick = { movie -> showMovieActions(movie) },
+                                    onAddToWatchlist = { movie -> viewModel.requestMovieWatchlist(movie) },
                                 )
                             }
 
@@ -770,6 +841,8 @@ fun SearchScreen(
                             }) { row ->
                                 SearchSeriesGridRow(
                                     seriesItems = row,
+                                    watchlistPendingIds = watchlistPendingIds,
+                                    watchlistRequestedIds = watchlistRequestedIds,
                                     isLocked = { seriesItem ->
                                         isLocked(
                                             categoryId = seriesItem.categoryId,
@@ -781,11 +854,14 @@ fun SearchScreen(
                                         if (locked) {
                                             pendingSeries = seriesItem
                                             showPinDialog = true
+                                        } else if (seriesItem.resolvePlexAvailability() == PlexAvailability.REQUESTABLE) {
+                                            viewModel.requestSeriesWatchlist(seriesItem)
                                         } else {
                                             onSeriesClick(seriesItem)
                                         }
                                     },
-                                    onSeriesLongClick = { seriesItem -> showSeriesActions(seriesItem) }
+                                    onSeriesLongClick = { seriesItem -> showSeriesActions(seriesItem) },
+                                    onAddToWatchlist = { seriesItem -> viewModel.requestSeriesWatchlist(seriesItem) },
                                 )
                             }
                         }
@@ -1055,9 +1131,12 @@ private fun SearchChannelGridRow(
 @Composable
 private fun SearchMovieGridRow(
     movies: List<Movie>,
+    watchlistPendingIds: Set<Long> = emptySet(),
+    watchlistRequestedIds: Set<Long> = emptySet(),
     isLocked: (Movie) -> Boolean,
     onMovieClick: (Movie, Boolean) -> Unit,
-    onMovieLongClick: (Movie) -> Unit
+    onMovieLongClick: (Movie) -> Unit,
+    onAddToWatchlist: (Movie) -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1069,7 +1148,14 @@ private fun SearchMovieGridRow(
                 movie = movie,
                 isLocked = locked,
                 onClick = { onMovieClick(movie, locked) },
-                onLongClick = { onMovieLongClick(movie) }
+                onLongClick = { onMovieLongClick(movie) },
+                onAddToWatchlist = if (movie.resolvePlexAvailability() == PlexAvailability.REQUESTABLE) {
+                    { onAddToWatchlist(movie) }
+                } else {
+                    null
+                },
+                watchlistPending = movie.id in watchlistPendingIds,
+                watchlistRequested = movie.id in watchlistRequestedIds,
             )
         }
     }
@@ -1078,9 +1164,12 @@ private fun SearchMovieGridRow(
 @Composable
 private fun SearchSeriesGridRow(
     seriesItems: List<Series>,
+    watchlistPendingIds: Set<Long> = emptySet(),
+    watchlistRequestedIds: Set<Long> = emptySet(),
     isLocked: (Series) -> Boolean,
     onSeriesClick: (Series, Boolean) -> Unit,
-    onSeriesLongClick: (Series) -> Unit
+    onSeriesLongClick: (Series) -> Unit,
+    onAddToWatchlist: (Series) -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1092,7 +1181,14 @@ private fun SearchSeriesGridRow(
                 series = seriesItem,
                 isLocked = locked,
                 onClick = { onSeriesClick(seriesItem, locked) },
-                onLongClick = { onSeriesLongClick(seriesItem) }
+                onLongClick = { onSeriesLongClick(seriesItem) },
+                onAddToWatchlist = if (seriesItem.resolvePlexAvailability() == PlexAvailability.REQUESTABLE) {
+                    { onAddToWatchlist(seriesItem) }
+                } else {
+                    null
+                },
+                watchlistPending = seriesItem.id in watchlistPendingIds,
+                watchlistRequested = seriesItem.id in watchlistRequestedIds,
             )
         }
     }

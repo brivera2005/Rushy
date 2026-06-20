@@ -80,14 +80,16 @@ internal suspend fun <T> withScopedScrubbingMode(
     }
 }
 
+internal const val LIVE_ZAP_STOP_SETTLE_MS = 150L
+
 internal fun releaseOutgoingLiveZapPlayback(
     stopPlayback: () -> Unit,
     stopLiveTimeshift: () -> Unit,
     clearPreload: () -> Unit
 ) {
-    stopPlayback()
-    stopLiveTimeshift()
     clearPreload()
+    stopLiveTimeshift()
+    stopPlayback()
 }
 
 internal fun shouldPreloadAdjacentChannel(
@@ -96,7 +98,7 @@ internal fun shouldPreloadAdjacentChannel(
     maxConnections: Int,
     preloadCoolingDown: Boolean
 ): Boolean {
-    if (streamUrl.isBlank() || preloadCoolingDown) return false
+    if (streamUrl.isBlank() || preloadCoolingDown || maxConnections <= 1) return false
     return when (providerType) {
         ProviderType.M3U -> true
         ProviderType.JELLYFIN,
@@ -216,6 +218,7 @@ internal fun PlayerViewModel.changeChannel(index: Int, isAutoFallback: Boolean =
     if (currentChannelIndex != -1 && currentChannelIndex != index) {
         previousChannelIndex = currentChannelIndex
     }
+    liveZapJob?.cancel()
     val requestVersion = beginPlaybackSession()
     releaseOutgoingLiveZapPlayback(
         stopPlayback = playerEngine::stop,
@@ -237,7 +240,9 @@ internal fun PlayerViewModel.changeChannel(index: Int, isAutoFallback: Boolean =
     displayChannelNumberFlow.value = resolveChannelNumber(channel, index)
     recentChannelsFlow.update { channels -> channels.filterNot { it.id == channel.id } }
 
-    viewModelScope.launch {
+    liveZapJob = viewModelScope.launch {
+        delay(LIVE_ZAP_STOP_SETTLE_MS)
+        if (!isActivePlaybackSession(requestVersion, channel.streamUrl)) return@launch
         withScopedScrubbingMode(playerEngine::setScrubbingMode) {
             val streamInfo = resolvePlaybackStreamInfo(channel.streamUrl, channel.id, channel.providerId, ContentType.LIVE)
                 ?: return@withScopedScrubbingMode

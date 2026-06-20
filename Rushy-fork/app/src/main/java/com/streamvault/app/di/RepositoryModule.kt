@@ -47,6 +47,12 @@ abstract class RepositoryModule {
     abstract fun bindSearchRepository(impl: SearchRepositoryImpl): SearchRepository
 
     @Binds @Singleton
+    abstract fun bindPlexSearchEnricher(impl: com.streamvault.data.search.PlexSearchEnricherImpl): PlexSearchEnricher
+
+    @Binds @Singleton
+    abstract fun bindWatchlistRequestRepository(impl: com.streamvault.data.watchlist.WatchlistRequestRepositoryImpl): WatchlistRequestRepository
+
+    @Binds @Singleton
     abstract fun bindEpgRepository(impl: EpgRepositoryImpl): EpgRepository
 
     @Binds @Singleton

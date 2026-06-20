@@ -2,6 +2,44 @@
 
 All notable product changes are recorded in this document.
 
+## [2.4.7] - 2026-06-19
+
+### Added
+
+- Personal builds auto-configure Xtream + Plex on startup via `DefaultCredentials` (GitHub Actions secrets for CI releases; local `DefaultCredentials.kt` for dev builds).
+- Optional Radarr/Sonarr bootstrap from the same credential bundle when URLs and API keys are set.
+
+### Changed
+
+- CI release workflow generates credentials from encrypted GitHub secrets instead of shipping an empty provider setup.
+
+## [2.4.6] - 2026-06-19
+
+### Changed
+
+- Live TV defaults to built-in ExoPlayer with one-click COMFORTABLE channel browsing; TiviMate/external routing is off by default.
+- Low-latency live buffers (3s min / 10s max), HLS live offset tuning, and faster channel zaps that stop the previous stream before starting the next.
+- Single-connection playlists: no adjacent-channel preload when max connections is 1; playback stops when leaving the player or backgrounding the app.
+
+### Fixed
+
+- Removed TiviMate-on-stall and automatic external-player recovery during live playback to prevent dual-connection lockouts.
+
+## [2.4.5] - 2026-06-19
+
+### Added
+
+- Plex search enrichment: green play arrow when content is ready on Plex, **Add to Watchlist** when it is not yet available locally.
+- Watchlist requests route to Radarr (movies) or Sonarr (series) when configured in Settings; otherwise they fall back to the Plex Discover watchlist API.
+- Optional Radarr/Sonarr URL and API key fields under Settings → Providers.
+
+## [2.4.4] - 2026-06-19
+
+### Fixed
+
+- Fixed OTA updates that kept showing "update available" after install: version checks now read the live installed version from PackageManager instead of stale compile-time BuildConfig, cached update state is cleared after a successful upgrade, and Rushy auto-restarts when the package manager finishes replacing the app.
+- Hardened update downloads to only accept `rushy.apk`, validate package name/version before install, verify APK SHA-256 when provided in `version.json`, and reject mismatched `version.json` metadata.
+
 ## [2.4.2] - 2026-06-19
 
 ### Fixed

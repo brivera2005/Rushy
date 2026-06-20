@@ -457,6 +457,7 @@ fun FullEpgScreen(
                             programsByChannel = uiState.programsByChannel,
                             guideWindowStart = uiState.guideWindowStart,
                             guideWindowEnd = uiState.guideWindowEnd,
+                            guideAnchorTime = uiState.guideAnchorTime,
                             density = uiState.selectedDensity,
                             onChannelClick = { channel ->
                                 if (isGuideChannelLocked(channel, categoriesById, uiState.parentalControlLevel)) {

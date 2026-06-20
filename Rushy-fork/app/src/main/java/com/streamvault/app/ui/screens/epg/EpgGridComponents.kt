@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -120,6 +121,7 @@ internal fun EpgGrid(
     programsByChannel: Map<String, List<Program>>,
     guideWindowStart: Long,
     guideWindowEnd: Long,
+    guideAnchorTime: Long,
     density: GuideDensity,
     transparentOverlay: Boolean = false,
     initialFocusedChannelId: Long? = null,
@@ -139,6 +141,7 @@ internal fun EpgGrid(
     }
     val horizontalScrollState = rememberScrollState()
     val verticalListState = rememberLazyListState()
+    val layoutDensity = LocalDensity.current
     val resolvedInitialChannelId = initialFocusedChannelId ?: channels.firstOrNull()?.id
     val initialFocusRequester = remember(resolvedInitialChannelId) { FocusRequester() }
     val initialFocusIndex = remember(channels, resolvedInitialChannelId) {
@@ -170,6 +173,18 @@ internal fun EpgGrid(
             timelineViewportWidth
         }
         val markerStepMs = EpgViewModel.HALF_HOUR_SHIFT_MS
+
+        LaunchedEffect(guideWindowStart, guideWindowEnd, guideAnchorTime, totalTimelineWidth, timelineViewportWidth) {
+            val totalDuration = (guideWindowEnd - guideWindowStart).coerceAtLeast(1L)
+            val anchorRatio = ((guideAnchorTime - guideWindowStart).toFloat() / totalDuration.toFloat())
+                .coerceIn(0f, 1f)
+            val scrollOffset = with(layoutDensity) {
+                val anchorOffset = totalTimelineWidth * anchorRatio
+                val centered = anchorOffset - (timelineViewportWidth / 2)
+                centered.coerceAtLeast(0.dp).roundToPx()
+            }
+            horizontalScrollState.scrollTo(scrollOffset)
+        }
 
         Column(modifier = Modifier.fillMaxSize()) {
             GuideTimelineHeader(
@@ -250,16 +265,14 @@ private fun GuideTimelineHeader(
     } else {
         stringResource(R.string.epg_outside_window)
     }
-    val hourMarkers = buildList {
-        val firstMarker = windowStart - (windowStart % markerStepMs)
-        var marker = firstMarker
-        while (marker <= windowEnd) {
-            add(marker)
-            marker += markerStepMs
-        }
-        if (lastOrNull() != windowEnd) {
-            add(windowEnd)
-        }
+    val hourMarkers = remember(windowStart, windowEnd, markerStepMs, zone) {
+        guideTimelineMarkers(
+            windowStart = windowStart,
+            windowEnd = windowEnd,
+            stepMs = markerStepMs,
+            zoneId = zone,
+            includeWindowEnd = true
+        )
     }
 
     Row(
@@ -495,14 +508,11 @@ fun EpgRow(
                         .fillMaxHeight()
                 ) {
                 val markers = remember(windowStart, windowEnd, markerStepMs) {
-                    buildList {
-                        val firstMarker = windowStart - (windowStart % markerStepMs)
-                        var marker = firstMarker
-                        while (marker <= windowEnd) {
-                            add(marker)
-                            marker += markerStepMs
-                        }
-                    }
+                    guideTimelineMarkers(
+                        windowStart = windowStart,
+                        windowEnd = windowEnd,
+                        stepMs = markerStepMs
+                    )
                 }
                 markers.forEach { marker ->
                     val markerRatio = ((marker - windowStart).toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)

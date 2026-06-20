@@ -69,9 +69,15 @@ internal fun PlayerViewModel.startTokenRenewalMonitoring(expirationTime: Long?) 
 fun PlayerViewModel.onAppBackgrounded() {
     if (!isAppInForeground) return
     isAppInForeground = false
-    shouldResumeAfterForeground = playerEngine.isPlaying.value
-    if (shouldResumeAfterForeground) {
-        playerEngine.pause()
+    if (currentContentType == ContentType.LIVE && !isCatchUpPlayback.value) {
+        playerEngine.preload(null)
+        playerEngine.stop()
+        shouldResumeAfterForeground = false
+    } else {
+        shouldResumeAfterForeground = playerEngine.isPlaying.value
+        if (shouldResumeAfterForeground) {
+            playerEngine.pause()
+        }
     }
     if (currentContentType != ContentType.LIVE) {
         viewModelScope.launch {
@@ -96,6 +102,9 @@ fun PlayerViewModel.onPlayerScreenDisposed() {
             persistPlaybackProgress()
             playbackHistoryRepository.flushPendingProgress()
         }
+    } else if (!isCatchUpPlayback.value) {
+        playerEngine.preload(null)
+        playerEngine.stop()
     }
     playerEngine.stopLiveTimeshift()
     stopLiveTranslationSession()
@@ -136,6 +145,7 @@ internal fun PlayerViewModel.cleanupAfterCleared(mainPlayerEngine: PlayerEngine)
     controlsHideJob?.cancel()
     zapOverlayJob?.cancel()
     zapBufferWatchdogJob?.cancel()
+    liveZapJob?.cancel()
     progressTrackingJob?.cancel()
     tokenRenewalJob?.cancel()
     aspectRatioJob?.cancel()

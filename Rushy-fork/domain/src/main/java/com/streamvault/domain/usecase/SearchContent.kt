@@ -8,6 +8,7 @@ import com.streamvault.domain.model.ProviderType
 import com.streamvault.domain.model.Series
 import com.streamvault.domain.model.SyncState
 import com.streamvault.domain.model.toCatalogSource
+import com.streamvault.domain.repository.PlexSearchEnricher
 import com.streamvault.domain.repository.ProviderRepository
 import com.streamvault.domain.repository.SearchRepository
 import com.streamvault.domain.repository.SearchRepositoryResult
@@ -46,7 +47,8 @@ class SearchContent @Inject constructor(
     private val searchRepository: SearchRepository,
     private val providerRepository: ProviderRepository,
     private val providerSyncStateReader: ProviderSyncStateReader,
-    private val naturalLanguageSearchInterpreter: NaturalLanguageSearchInterpreter
+    private val naturalLanguageSearchInterpreter: NaturalLanguageSearchInterpreter,
+    private val plexSearchEnricher: PlexSearchEnricher,
 ) {
     private companion object {
         const val SEARCH_RESPONSE_TIMEOUT_MS = 2_500L
@@ -132,6 +134,7 @@ class SearchContent @Inject constructor(
 
             var merged = SearchRepositoryResult()
             var degraded = false
+            var usedPlexFallback = false
 
             for (searchQuery in searchQueries) {
                 val primaryResult = executeSearch(
@@ -151,6 +154,7 @@ class SearchContent @Inject constructor(
                         maxResultsPerSection = maxResultsPerSection
                     )
                     degraded = degraded || fallbackResult.second
+                    usedPlexFallback = true
                     combined = mergeXtreamFirst(
                         combined,
                         tagCatalogSource(fallbackResult.first, CatalogSource.PLEX),
@@ -169,7 +173,20 @@ class SearchContent @Inject constructor(
                 }
             }
 
-            emit(merged to degraded)
+            val includeMovies = scope == SearchContentScope.ALL || scope == SearchContentScope.MOVIES
+            val includeSeries = scope == SearchContentScope.ALL || scope == SearchContentScope.SERIES
+            val (enrichedMovies, enrichedSeries) = plexSearchEnricher.enrich(
+                movies = merged.movies,
+                series = merged.series,
+                query = query,
+                includeMovies = includeMovies,
+                includeSeries = includeSeries,
+                maxResultsPerSection = maxResultsPerSection,
+                usedPlexFallback = usedPlexFallback,
+            )
+            emit(
+                merged.copy(movies = enrichedMovies, series = enrichedSeries) to degraded
+            )
         }
             .catch { error ->
                 if (error.shouldRethrowDomainFlowFailure()) throw error

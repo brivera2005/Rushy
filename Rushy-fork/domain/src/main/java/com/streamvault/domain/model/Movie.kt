@@ -33,7 +33,9 @@ data class Movie(
     val variants: List<VodMovieVariant> = emptyList(),
     val duplicateConfidence: VodDuplicateConfidence = VodDuplicateConfidence.NONE,
     val variantLabel: String? = null,
-    val catalogSource: CatalogSource? = null
+    val catalogSource: CatalogSource? = null,
+    val plexAvailability: PlexAvailability? = null,
+    val plexDiscoverRatingKey: String? = null
 ) {
     init {
         require(durationSeconds >= 0) { "durationSeconds must be non-negative" }

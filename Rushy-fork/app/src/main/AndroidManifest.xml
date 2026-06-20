@@ -39,6 +39,10 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/vnd.apple.mpegurl" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
         <package android:name="ar.tvplayer.tv" />
         <package android:name="org.videolan.vlc" />
         <package android:name="org.videolan.vlc.tv" />
@@ -175,6 +179,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name=".update.AppUpdateReplaceReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
 
     </application>

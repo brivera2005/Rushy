@@ -65,7 +65,8 @@ internal class SettingsAppUpdateActions(
                         releaseUrl = release.releaseUrl,
                         downloadUrl = release.downloadUrl,
                         releaseNotes = release.releaseNotes,
-                        publishedAt = release.publishedAt
+                        publishedAt = release.publishedAt,
+                        apkSha256 = release.apkSha256,
                     )
                     val updateAvailable = isRemoteVersionNewer(
                         release.versionCode,
@@ -90,6 +91,7 @@ internal class SettingsAppUpdateActions(
                                 downloadUrl = release.downloadUrl,
                                 releaseNotes = release.releaseNotes,
                                 publishedAt = release.publishedAt,
+                                apkSha256 = release.apkSha256,
                                 isUpdateAvailable = updateAvailable,
                                 lastCheckedAt = checkedAt,
                                 errorMessage = null
@@ -135,7 +137,8 @@ internal class SettingsAppUpdateActions(
 
     fun installDownloadedUpdate(scope: CoroutineScope) {
         scope.launch {
-            when (val result = appUpdateInstaller.installDownloadedUpdate()) {
+            val expectedSha256 = uiState.value.appUpdate.apkSha256
+            when (val result = appUpdateInstaller.installDownloadedUpdate(expectedSha256)) {
                 is Result.Error -> uiState.update { it.copy(userMessage = result.message) }
                 is Result.Success -> uiState.update {
                     it.copy(userMessage = appContext.getString(R.string.settings_update_install_started))

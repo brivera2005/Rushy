@@ -19,39 +19,42 @@ internal data class PlaybackBufferPolicy(
 
 internal object PlaybackBufferPolicies {
     private const val DEFAULT_TARGET_BUFFER_BYTES = -1
-    private const val MPEG_TS_LIVE_TARGET_BUFFER_BYTES = 16 * 1024 * 1024
-    private const val MEDIUM_LIVE_TARGET_BUFFER_BYTES = 32 * 1024 * 1024
-    private const val LARGE_LIVE_TARGET_BUFFER_BYTES = 64 * 1024 * 1024
-    private const val MPEG_TS_LIVE_MIN_BUFFER_MS = 15_000
-    private const val MPEG_TS_LIVE_MAX_BUFFER_MS = 50_000
+    private const val MPEG_TS_LIVE_TARGET_BUFFER_BYTES = 8 * 1024 * 1024
+    private const val MEDIUM_LIVE_TARGET_BUFFER_BYTES = 16 * 1024 * 1024
+    private const val LARGE_LIVE_TARGET_BUFFER_BYTES = 32 * 1024 * 1024
 
-    private const val LOW_MEMORY_LIVE_MIN_BUFFER_MS = 4_000
-    private const val LOW_MEMORY_LIVE_MAX_BUFFER_MS = 12_000
-    private const val LOW_MEMORY_COMPAT_LIVE_MIN_BUFFER_MS = 6_000
-    private const val LOW_MEMORY_COMPAT_LIVE_MAX_BUFFER_MS = 15_000
+    // Low-latency live IPTV: 2–4s min buffer, fast start over deep cushion.
+    private const val FAST_LIVE_MIN_BUFFER_MS = 3_000
+    private const val FAST_LIVE_MAX_BUFFER_MS = 10_000
+    private const val FAST_LIVE_PLAYBACK_BUFFER_MS = 1_500
+    private const val FAST_LIVE_REBUFFER_MS = 3_000
+
+    private const val MPEG_TS_LIVE_MIN_BUFFER_MS = 2_500
+    private const val MPEG_TS_LIVE_MAX_BUFFER_MS = 8_000
+
+    private const val LOW_MEMORY_LIVE_MIN_BUFFER_MS = 2_500
+    private const val LOW_MEMORY_LIVE_MAX_BUFFER_MS = 8_000
+    private const val LOW_MEMORY_COMPAT_LIVE_MIN_BUFFER_MS = 3_000
+    private const val LOW_MEMORY_COMPAT_LIVE_MAX_BUFFER_MS = 10_000
     private const val LOW_MEMORY_VOD_MIN_BUFFER_MS = 15_000
     private const val LOW_MEMORY_VOD_MAX_BUFFER_MS = 45_000
     private const val LOW_MEMORY_PLAYBACK_BUFFER_MS = 1_000
-    private const val LOW_MEMORY_REBUFFER_MS = 3_000
+    private const val LOW_MEMORY_REBUFFER_MS = 2_500
 
-    private const val LIVE_MIN_BUFFER_MS = 15_000
-    private const val LIVE_MAX_BUFFER_MS = 50_000
-    private const val COMPAT_LIVE_MIN_BUFFER_MS = 18_000
-    private const val COMPAT_LIVE_MAX_BUFFER_MS = 60_000
+    private const val COMPAT_LIVE_MIN_BUFFER_MS = 4_000
+    private const val COMPAT_LIVE_MAX_BUFFER_MS = 12_000
     private const val VOD_MIN_BUFFER_MS = 90_000
     private const val VOD_MAX_BUFFER_MS = 240_000
-    private const val PLAYBACK_BUFFER_MS = 2_500
-    private const val REBUFFER_MS = 8_000
     private const val VOD_PLAYBACK_BUFFER_MS = 8_000
     private const val VOD_REBUFFER_MS = 18_000
-    private const val MEDIUM_LIVE_MIN_BUFFER_MS = 15_000
-    private const val MEDIUM_LIVE_MAX_BUFFER_MS = 50_000
-    private const val MEDIUM_LIVE_PLAYBACK_BUFFER_MS = 3_000
-    private const val MEDIUM_LIVE_REBUFFER_MS = 10_000
-    private const val LARGE_LIVE_MIN_BUFFER_MS = 30_000
-    private const val LARGE_LIVE_MAX_BUFFER_MS = 90_000
-    private const val LARGE_LIVE_PLAYBACK_BUFFER_MS = 5_000
-    private const val LARGE_LIVE_REBUFFER_MS = 15_000
+    private const val MEDIUM_LIVE_MIN_BUFFER_MS = 8_000
+    private const val MEDIUM_LIVE_MAX_BUFFER_MS = 20_000
+    private const val MEDIUM_LIVE_PLAYBACK_BUFFER_MS = 2_500
+    private const val MEDIUM_LIVE_REBUFFER_MS = 6_000
+    private const val LARGE_LIVE_MIN_BUFFER_MS = 15_000
+    private const val LARGE_LIVE_MAX_BUFFER_MS = 40_000
+    private const val LARGE_LIVE_PLAYBACK_BUFFER_MS = 4_000
+    private const val LARGE_LIVE_REBUFFER_MS = 10_000
     private const val UHD_MIN_WIDTH = 3_840
     private const val UHD_MIN_HEIGHT = 2_160
     private const val HIGH_BITRATE_THRESHOLD_BPS = 20_000_000
@@ -120,17 +123,17 @@ internal object PlaybackBufferPolicies {
                         lowMemoryDevice = lowMemoryDevice
                     )
                 } else {
-                    mediumLivePolicy(
+                    fastLivePolicy(
                         label = "auto-live-hls",
                         qualityReason = "live-hls"
                     )
                 }
-                lowMemoryDevice -> mediumLivePolicy(
+                lowMemoryDevice -> fastLivePolicy(
                     label = "auto-uhd-live-hls-capped",
                     qualityReason = qualityReason,
                     lowMemoryCapped = true
                 )
-                else -> largeLivePolicy(label = "auto-uhd-live-hls", qualityReason = qualityReason)
+                else -> mediumLivePolicy(label = "auto-uhd-live-hls", qualityReason = qualityReason)
             }
         }
         else -> baselineLivePolicy(
@@ -190,8 +193,8 @@ internal object PlaybackBufferPolicies {
                 label = "mpeg-ts-live",
                 minBufferMs = MPEG_TS_LIVE_MIN_BUFFER_MS,
                 maxBufferMs = MPEG_TS_LIVE_MAX_BUFFER_MS,
-                playbackBufferMs = PLAYBACK_BUFFER_MS,
-                rebufferMs = REBUFFER_MS,
+                playbackBufferMs = FAST_LIVE_PLAYBACK_BUFFER_MS,
+                rebufferMs = FAST_LIVE_REBUFFER_MS,
                 targetBufferBytes = MPEG_TS_LIVE_TARGET_BUFFER_BYTES,
                 prioritizeTimeOverSizeThresholds = true
             )
@@ -200,21 +203,13 @@ internal object PlaybackBufferPolicies {
                 label = "compat-live",
                 minBufferMs = COMPAT_LIVE_MIN_BUFFER_MS,
                 maxBufferMs = COMPAT_LIVE_MAX_BUFFER_MS,
-                playbackBufferMs = PLAYBACK_BUFFER_MS,
-                rebufferMs = REBUFFER_MS,
+                playbackBufferMs = FAST_LIVE_PLAYBACK_BUFFER_MS,
+                rebufferMs = FAST_LIVE_REBUFFER_MS,
                 targetBufferBytes = DEFAULT_TARGET_BUFFER_BYTES,
                 prioritizeTimeOverSizeThresholds = true
             )
         resolvedStreamType.isLive ->
-            PlaybackBufferPolicy(
-                label = "stable-live",
-                minBufferMs = LIVE_MIN_BUFFER_MS,
-                maxBufferMs = LIVE_MAX_BUFFER_MS,
-                playbackBufferMs = PLAYBACK_BUFFER_MS,
-                rebufferMs = REBUFFER_MS,
-                targetBufferBytes = DEFAULT_TARGET_BUFFER_BYTES,
-                prioritizeTimeOverSizeThresholds = true
-            )
+            fastLivePolicy(label = "fast-live", qualityReason = "live-default")
         else ->
             PlaybackBufferPolicy(
                 label = "stable-vod",
@@ -226,6 +221,22 @@ internal object PlaybackBufferPolicies {
                 prioritizeTimeOverSizeThresholds = true
             )
     }
+
+    private fun fastLivePolicy(
+        label: String,
+        qualityReason: String,
+        lowMemoryCapped: Boolean = false
+    ): PlaybackBufferPolicy = PlaybackBufferPolicy(
+        label = label,
+        minBufferMs = FAST_LIVE_MIN_BUFFER_MS,
+        maxBufferMs = FAST_LIVE_MAX_BUFFER_MS,
+        playbackBufferMs = FAST_LIVE_PLAYBACK_BUFFER_MS,
+        rebufferMs = FAST_LIVE_REBUFFER_MS,
+        targetBufferBytes = DEFAULT_TARGET_BUFFER_BYTES,
+        prioritizeTimeOverSizeThresholds = true,
+        qualityReason = qualityReason,
+        lowMemoryCapped = lowMemoryCapped
+    )
 
     private fun mediumLivePolicy(
         label: String,

@@ -10,6 +10,7 @@ import android.util.Rational
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
+import com.streamvault.app.update.AppUpdateInstaller
 import com.streamvault.app.cast.CastManager
 import com.streamvault.app.cast.CastRouteChooserActivity
 import com.streamvault.app.backup.BackupFileBridge
@@ -88,6 +89,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var castManager: CastManager
+
+    @Inject
+    lateinit var appUpdateInstaller: AppUpdateInstaller
 
     private val _pictureInPictureModeFlow = MutableStateFlow(false)
     val pictureInPictureModeFlow: StateFlow<Boolean> = _pictureInPictureModeFlow.asStateFlow()
@@ -176,6 +180,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         applyImmersiveSystemUi()
+        lifecycleScope.launch {
+            appUpdateInstaller.reconcileInstalledUpdateState()
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

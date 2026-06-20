@@ -86,7 +86,7 @@ internal fun observeSettingsPreferenceSnapshot(
             isIncognitoMode = false,
             useXtreamTextClassification = true,
             xtreamBase64TextCompatibility = false,
-            liveTvChannelMode = LiveTvChannelMode.PRO,
+            liveTvChannelMode = LiveTvChannelMode.COMFORTABLE,
             showLiveSourceSwitcher = false,
             showAllChannelsCategory = true,
             showRecentChannelsCategory = true,
@@ -115,7 +115,8 @@ internal fun observeSettingsPreferenceSnapshot(
             cachedAppUpdateReleaseUrl = null,
             cachedAppUpdateDownloadUrl = null,
             cachedAppUpdateReleaseNotes = "",
-            cachedAppUpdatePublishedAt = null
+            cachedAppUpdatePublishedAt = null,
+            cachedAppUpdateApkSha256 = null
         )
     }.combine(preferencesRepository.appLanguage) { snapshot, language ->
         snapshot.copy(appLanguage = language)
@@ -263,5 +264,7 @@ internal fun observeSettingsPreferenceSnapshot(
         snapshot.copy(cachedAppUpdateReleaseNotes = releaseNotes)
     }.combine(preferencesRepository.cachedAppUpdatePublishedAt) { snapshot, publishedAt ->
         snapshot.copy(cachedAppUpdatePublishedAt = publishedAt)
+    }.combine(preferencesRepository.cachedAppUpdateApkSha256) { snapshot, apkSha256 ->
+        snapshot.copy(cachedAppUpdateApkSha256 = apkSha256)
     }
 }

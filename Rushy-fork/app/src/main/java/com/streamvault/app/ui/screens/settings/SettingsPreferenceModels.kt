@@ -117,7 +117,8 @@ internal data class SettingsPreferenceSnapshot(
     val cachedAppUpdateReleaseUrl: String?,
     val cachedAppUpdateDownloadUrl: String?,
     val cachedAppUpdateReleaseNotes: String,
-    val cachedAppUpdatePublishedAt: String?
+    val cachedAppUpdatePublishedAt: String?,
+    val cachedAppUpdateApkSha256: String?,
 )
 
 internal fun ProviderSyncSelection.label(application: Application): String = when (this) {

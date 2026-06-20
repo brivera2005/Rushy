@@ -123,8 +123,8 @@ class PlayerViewModel @Inject constructor(
         private const val TOKEN_RENEWAL_CHECK_INTERVAL_MS = 10_000L
         private const val LOW_BANDWIDTH_THRESHOLD_BPS = 500_000L
         private const val LOW_BANDWIDTH_DURATION_SECONDS = 30
-        private const val LIVE_UI_STALL_THRESHOLD_MS = 12_000L
-        private const val LIVE_UI_STALL_POLL_MS = 3_000L
+        private const val LIVE_UI_STALL_THRESHOLD_MS = 9_000L
+        private const val LIVE_UI_STALL_POLL_MS = 2_000L
         private const val LIVE_UI_STALL_RECOVERY_COOLDOWN_MS = 20_000L
         internal val PLAYBACK_TIMER_PRESETS_MINUTES = setOf(0, 15, 30, 45, 60, 90, 120)
         internal const val TIMER_TICK_MS = 1_000L
@@ -287,7 +287,7 @@ class PlayerViewModel @Inject constructor(
     internal var currentResolvedStreamInfo: StreamInfo? = null
     internal var pendingCatchUpUrls: List<String> = emptyList()
     internal var livePlaybackReadyForCurrentSession: Boolean = false
-    internal var liveTvPlayerMode: LiveTvPlayerMode = LiveTvPlayerMode.TIVIMATE_ALWAYS
+    internal var liveTvPlayerMode: LiveTvPlayerMode = LiveTvPlayerMode.INTERNAL
     private var liveUiStallRecoveryInFlight = false
     private var lastLiveUiStallRecoveryAtMs = 0L
     internal var channelNumberingMode: ChannelNumberingMode = ChannelNumberingMode.GROUP

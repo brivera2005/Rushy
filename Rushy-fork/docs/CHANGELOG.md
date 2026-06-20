@@ -2,6 +2,14 @@
 
 All notable product changes are recorded in this document.
 
+## [2.4.2] - 2026-06-19
+
+### Fixed
+
+- Restored built-in ExoPlayer as the default live TV player and re-enabled Settings-based routing (TiviMate, TiviMate on stall, and external player remain available).
+- Fixed live TV freezing after ~1 minute: deeper HLS live buffers (15s min / 50s max), 9s frame-silent stall detection, HLS→MPEG-TS fallback before reconnect retries, and mid-playback URL refresh via the live watchdog.
+- Migrated installs forced to TiviMate-only in v2.4.1 back to the built-in player unless another mode was explicitly chosen.
+
 ## [2.4.1] - 2026-06-18
 
 ### Fixed

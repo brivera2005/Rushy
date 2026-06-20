@@ -9,15 +9,16 @@ import org.junit.Test
 class PlaybackBufferPoliciesTest {
 
     @Test
-    fun `normal live uses production live buffer baseline`() {
+    fun `normal live uses auto medium hls buffer baseline`() {
         val policy = PlaybackBufferPolicies.forPlayback(isLive = true, compatibilityMode = false)
 
-        assertThat(policy.label).isEqualTo("stable-live")
-        assertThat(policy.minBufferMs).isEqualTo(12_000)
-        assertThat(policy.maxBufferMs).isEqualTo(45_000)
-        assertThat(policy.playbackBufferMs).isEqualTo(2_500)
-        assertThat(policy.rebufferMs).isEqualTo(8_000)
-        assertThat(policy.targetBufferBytes).isEqualTo(-1)
+        assertThat(policy.label).isEqualTo("auto-live-hls")
+        assertThat(policy.minBufferMs).isEqualTo(15_000)
+        assertThat(policy.maxBufferMs).isEqualTo(50_000)
+        assertThat(policy.playbackBufferMs).isEqualTo(3_000)
+        assertThat(policy.rebufferMs).isEqualTo(10_000)
+        assertThat(policy.targetBufferBytes).isEqualTo(32 * 1024 * 1024)
+        assertThat(policy.qualityReason).isEqualTo("live-hls")
         assertThat(policy.prioritizeTimeOverSizeThresholds).isTrue()
     }
 
@@ -31,8 +32,8 @@ class PlaybackBufferPoliciesTest {
         )
 
         assertThat(policy.label).isEqualTo("stable-live")
-        assertThat(policy.minBufferMs).isEqualTo(12_000)
-        assertThat(policy.maxBufferMs).isEqualTo(45_000)
+        assertThat(policy.minBufferMs).isEqualTo(15_000)
+        assertThat(policy.maxBufferMs).isEqualTo(50_000)
         assertThat(policy.playbackBufferMs).isEqualTo(2_500)
         assertThat(policy.rebufferMs).isEqualTo(8_000)
         assertThat(policy.targetBufferBytes).isEqualTo(-1)
@@ -49,7 +50,7 @@ class PlaybackBufferPoliciesTest {
 
         assertThat(policy.label).isEqualTo("medium-live")
         assertThat(policy.minBufferMs).isEqualTo(15_000)
-        assertThat(policy.maxBufferMs).isEqualTo(45_000)
+        assertThat(policy.maxBufferMs).isEqualTo(50_000)
         assertThat(policy.playbackBufferMs).isEqualTo(3_000)
         assertThat(policy.rebufferMs).isEqualTo(10_000)
         assertThat(policy.targetBufferBytes).isEqualTo(32 * 1024 * 1024)
@@ -72,6 +73,23 @@ class PlaybackBufferPoliciesTest {
         assertThat(policy.rebufferMs).isEqualTo(15_000)
         assertThat(policy.targetBufferBytes).isEqualTo(64 * 1024 * 1024)
         assertThat(policy.qualityReason).isEqualTo("user-large")
+    }
+
+    @Test
+    fun `auto live hls without uhd metadata uses medium live buffer`() {
+        val policy = PlaybackBufferPolicies.forPlayback(
+            resolvedStreamType = ResolvedStreamType.HLS,
+            compatibilityMode = false,
+            lowMemoryDevice = false,
+            bufferMode = PlaybackBufferMode.AUTO,
+            streamInfo = StreamInfo(url = "https://example.com/live/sports/index.m3u8")
+        )
+
+        assertThat(policy.label).isEqualTo("auto-live-hls")
+        assertThat(policy.minBufferMs).isEqualTo(15_000)
+        assertThat(policy.maxBufferMs).isEqualTo(50_000)
+        assertThat(policy.targetBufferBytes).isEqualTo(32 * 1024 * 1024)
+        assertThat(policy.qualityReason).isEqualTo("live-hls")
     }
 
     @Test
@@ -157,7 +175,7 @@ class PlaybackBufferPoliciesTest {
 
         assertThat(policy.label).isEqualTo("auto-uhd-live-hls-capped")
         assertThat(policy.minBufferMs).isEqualTo(15_000)
-        assertThat(policy.maxBufferMs).isEqualTo(45_000)
+        assertThat(policy.maxBufferMs).isEqualTo(50_000)
         assertThat(policy.playbackBufferMs).isEqualTo(3_000)
         assertThat(policy.rebufferMs).isEqualTo(10_000)
         assertThat(policy.targetBufferBytes).isEqualTo(32 * 1024 * 1024)
@@ -201,8 +219,8 @@ class PlaybackBufferPoliciesTest {
         )
 
         assertThat(policy.label).isEqualTo("mpeg-ts-live")
-        assertThat(policy.minBufferMs).isEqualTo(8_000)
-        assertThat(policy.maxBufferMs).isEqualTo(20_000)
+        assertThat(policy.minBufferMs).isEqualTo(15_000)
+        assertThat(policy.maxBufferMs).isEqualTo(50_000)
         assertThat(policy.playbackBufferMs).isEqualTo(2_500)
         assertThat(policy.rebufferMs).isEqualTo(8_000)
         assertThat(policy.targetBufferBytes).isEqualTo(16 * 1024 * 1024)
@@ -220,8 +238,8 @@ class PlaybackBufferPoliciesTest {
         )
 
         assertThat(policy.label).isEqualTo("mpeg-ts-live")
-        assertThat(policy.minBufferMs).isEqualTo(8_000)
-        assertThat(policy.maxBufferMs).isEqualTo(20_000)
+        assertThat(policy.minBufferMs).isEqualTo(15_000)
+        assertThat(policy.maxBufferMs).isEqualTo(50_000)
         assertThat(policy.targetBufferBytes).isEqualTo(16 * 1024 * 1024)
     }
 
@@ -236,7 +254,7 @@ class PlaybackBufferPoliciesTest {
 
         assertThat(policy.label).isEqualTo("medium-live")
         assertThat(policy.minBufferMs).isEqualTo(15_000)
-        assertThat(policy.maxBufferMs).isEqualTo(45_000)
+        assertThat(policy.maxBufferMs).isEqualTo(50_000)
         assertThat(policy.targetBufferBytes).isEqualTo(32 * 1024 * 1024)
     }
 

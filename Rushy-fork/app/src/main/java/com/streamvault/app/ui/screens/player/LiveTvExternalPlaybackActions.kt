@@ -18,8 +18,8 @@ internal suspend fun PlayerViewModel.tryDelegateLivePlaybackAtStart(
     return when (mode) {
         LiveTvPlayerMode.TIVIMATE_ALWAYS,
         LiveTvPlayerMode.TIVIMATE,
-        LiveTvPlayerMode.EXTERNAL,
-        LiveTvPlayerMode.TIVIMATE_ON_STALL -> launchExternalLivePlayback(finishPlayer = true)
+        LiveTvPlayerMode.EXTERNAL -> launchExternalLivePlayback(finishPlayer = true)
+        LiveTvPlayerMode.TIVIMATE_ON_STALL,
         LiveTvPlayerMode.INTERNAL -> false
     }
 }

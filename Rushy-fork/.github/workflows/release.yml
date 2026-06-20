@@ -88,6 +88,11 @@ jobs:
           fi
           cp "$APK_PATH" "dist/${{ steps.app_version.outputs.apk_name }}"
           cp "$APK_PATH" dist/StreamVault.apk
+          cp "$APK_PATH" dist/rushy.apk
+          printf '{"versionName":"%s","versionCode":%s}\n' \
+            "${{ steps.app_version.outputs.version_name }}" \
+            "${{ steps.app_version.outputs.version_code }}" \
+            > dist/version.json
 
       - name: Upload release APK artifact
         if: github.event_name == 'workflow_dispatch'
@@ -97,6 +102,8 @@ jobs:
           path: |
             dist/${{ steps.app_version.outputs.apk_name }}
             dist/StreamVault.apk
+            dist/rushy.apk
+            dist/version.json
 
       - name: Upload test reports
         if: always()
@@ -180,5 +187,7 @@ jobs:
           files: |
             dist/${{ steps.app_version.outputs.apk_name }}
             dist/StreamVault.apk
+            dist/rushy.apk
+            dist/version.json
           make_latest: true
           generate_release_notes: false

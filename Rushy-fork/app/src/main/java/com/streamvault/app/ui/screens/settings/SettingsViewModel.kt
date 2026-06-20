@@ -146,7 +146,7 @@ class SettingsViewModel @Inject constructor(
         preferencesRepository.playerLiveTvPlayerMode.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = LiveTvPlayerMode.TIVIMATE_ALWAYS
+            initialValue = LiveTvPlayerMode.INTERNAL
         )
     private val activeProviderIdFlow = providerRepository.getActiveProvider().map { it?.id }
     private val appUpdateActions = SettingsAppUpdateActions(

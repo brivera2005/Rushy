@@ -5,8 +5,8 @@ import com.streamvault.player.PlaybackState
 class VideoStallDetector(
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val initialGraceMs: Long = 8_000L,
-    private val stallThresholdMs: Long = 5_000L,
-    private val bufferingStallThresholdMs: Long = 8_000L,
+    private val stallThresholdMs: Long = 9_000L,
+    private val bufferingStallThresholdMs: Long = 9_000L,
     private val minPositionAdvanceMs: Long = 1_500L
 ) {
     private var startedAtMs: Long = 0L

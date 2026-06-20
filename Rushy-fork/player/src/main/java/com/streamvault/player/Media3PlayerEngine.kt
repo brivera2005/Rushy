@@ -1740,16 +1740,6 @@ class Media3PlayerEngine @Inject constructor(
         }
 
         videoStallRecoveryAttempt = nextRecoveryAttempt
-        if (liveReconnectionStall) {
-            Log.w(TAG, "live-${_playbackState.value.name.lowercase()}-stall reconnect attempt=$videoStallRecoveryAttempt")
-            prepareInternal(
-                streamInfo = streamInfo,
-                preserveRetryState = true,
-                seekPositionMs = null,
-                autoPlay = wasPlaying
-            )
-            return
-        }
 
         if (
             shouldFallbackStalledHlsToLiveTs(
@@ -1771,6 +1761,17 @@ class Media3PlayerEngine @Inject constructor(
                 )
                 return
             }
+        }
+
+        if (liveReconnectionStall) {
+            Log.w(TAG, "live-${_playbackState.value.name.lowercase()}-stall reconnect attempt=$videoStallRecoveryAttempt")
+            prepareInternal(
+                streamInfo = streamInfo,
+                preserveRetryState = true,
+                seekPositionMs = null,
+                autoPlay = wasPlaying
+            )
+            return
         }
 
         recordCompatibilityFailure("VIDEO_STALL")
